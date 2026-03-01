@@ -1,6 +1,8 @@
 package com.spsu.greenmile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,25 +19,27 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 
 data class StudentEntry(
-    val rank: Int,
     val name: String,
+    val rollNo: String,
     val department: String,
     val points: Int,
     val carbonSaved: Double
 )
 
 data class DeptEntry(
-    val rank: Int,
     val name: String,
     val totalPoints: Int,
-    val members: Int
+    val memberCount: Int
 )
 
 @Composable
 fun LeaderboardScreen(onBack: () -> Unit) {
 
+    BackHandler { onBack() }
+
     var selectedTab by remember { mutableStateOf(0) }
-    var students by remember { mutableStateOf<List<StudentEntry>>(emptyList()) }
+    var studentList by remember { mutableStateOf<List<StudentEntry>>(emptyList()) }
+    var deptList by remember { mutableStateOf<List<DeptEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     val db = FirebaseFirestore.getInstance()
@@ -46,36 +50,41 @@ fun LeaderboardScreen(onBack: () -> Unit) {
             .limit(10)
             .get()
             .addOnSuccessListener { result ->
-                val list = result.documents.mapIndexed { index, doc ->
+                val students = result.documents.mapNotNull { doc ->
+                    val name = doc.getString("name") ?: return@mapNotNull null
                     StudentEntry(
-                        rank = index + 1,
-                        name = doc.getString("name") ?: "Unknown",
-                        department = doc.getString("department") ?: "N/A",
+                        name = name,
+                        rollNo = doc.getString("rollNo") ?: "",
+                        department = doc.getString("department") ?: "",
                         points = (doc.getLong("totalPoints") ?: 0).toInt(),
                         carbonSaved = doc.getDouble("totalCarbonSaved") ?: 0.0
                     )
                 }
-                students = list
-                isLoading = false
-            }
-            .addOnFailureListener {
-                isLoading = false
-            }
-    }
+                studentList = students
 
-    val departments = listOf(
-        DeptEntry(1, "🖥️ CSE", 1220, 45),
-        DeptEntry(2, "⚡ ECE", 1080, 40),
-        DeptEntry(3, "⚙️ ME", 960, 38),
-        DeptEntry(4, "🏗️ Civil", 820, 35),
-        DeptEntry(5, "📊 MBA", 650, 30)
-    )
+                // Build department leaderboard from student data
+                val deptMap = mutableMapOf<String, Pair<Int, Int>>()
+                result.documents.forEach { doc ->
+                    val dept = doc.getString("department") ?: "Other"
+                    val pts = (doc.getLong("totalPoints") ?: 0).toInt()
+                    val current = deptMap[dept] ?: Pair(0, 0)
+                    deptMap[dept] = Pair(current.first + pts, current.second + 1)
+                }
+                deptList = deptMap.map { (dept, data) ->
+                    DeptEntry(dept, data.first, data.second)
+                }.sortedByDescending { it.totalPoints }
+
+                isLoading = false
+            }
+            .addOnFailureListener { isLoading = false }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF1F8E9))
     ) {
+        // Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -86,41 +95,44 @@ fun LeaderboardScreen(onBack: () -> Unit) {
                 Text(
                     text = "← Back",
                     color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clickable { onBack() }
+                        .padding(bottom = 8.dp)
                 )
                 Text(
                     text = "🏆 Leaderboard",
-                    fontSize = 26.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
                 Text(
-                    text = "Top eco-warriors on campus",
+                    text = "SPSU Campus Rankings",
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = Color.White.copy(alpha = 0.7f)
                 )
             }
         }
 
+        // Tabs
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             TabButton(
-                text = "👤 Students",
+                title = "🎓 Students",
                 selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onClick = { selectedTab = 0 }
             )
             TabButton(
-                text = "🏫 Departments",
+                title = "🏛️ Department",
                 selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                onClick = { selectedTab = 1 }
             )
         }
 
@@ -132,7 +144,7 @@ fun LeaderboardScreen(onBack: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFF2E7D32))
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Loading real data...", color = Color.Gray)
+                    Text("Loading rankings...", color = Color.Gray)
                 }
             }
         } else {
@@ -143,124 +155,98 @@ fun LeaderboardScreen(onBack: () -> Unit) {
                     .padding(16.dp)
             ) {
                 if (selectedTab == 0) {
-                    if (students.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "🌱", fontSize = 48.sp)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "No entries yet!",
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2E7D32)
-                                )
-                                Text(
-                                    text = "Be the first to log activity",
-                                    color = Color.Gray,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
+                    if (studentList.isEmpty()) {
+                        EmptyLeaderboard()
                     } else {
-                        if (students.size >= 3) {
+                        // Top 3 podium
+                        if (studentList.size >= 3) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                    .padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                PodiumCard(student = students[1], medal = "🥈", height = 80)
-                                PodiumCard(student = students[0], medal = "🥇", height = 110)
-                                PodiumCard(student = students[2], medal = "🥉", height = 65)
+                                // 2nd place
+                                PodiumCard(
+                                    modifier = Modifier.weight(1f),
+                                    entry = studentList[1],
+                                    rank = 2,
+                                    height = 80.dp,
+                                    color = Color(0xFF90A4AE)
+                                )
+                                // 1st place
+                                PodiumCard(
+                                    modifier = Modifier.weight(1f),
+                                    entry = studentList[0],
+                                    rank = 1,
+                                    height = 110.dp,
+                                    color = Color(0xFFFFD700)
+                                )
+                                // 3rd place
+                                PodiumCard(
+                                    modifier = Modifier.weight(1f),
+                                    entry = studentList[2],
+                                    rank = 3,
+                                    height = 60.dp,
+                                    color = Color(0xFFCD7F32)
+                                )
                             }
+                        }
+
+                        // Rest of the list
+                        studentList.drop(3).forEachIndexed { index, entry ->
+                            StudentRow(rank = index + 4, entry = entry)
                             Spacer(modifier = Modifier.height(8.dp))
-                            students.drop(3).forEach { student ->
-                                StudentRow(student = student)
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                        } else {
-                            students.forEach { student ->
-                                StudentRow(student = student)
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
                         }
                     }
                 } else {
-                    departments.forEach { dept ->
-                        DeptRow(dept = dept)
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "🌍 Campus Total Impact",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
+                    if (deptList.isEmpty()) {
+                        EmptyLeaderboard()
+                    } else {
+                        deptList.forEachIndexed { index, dept ->
+                            DeptRow(rank = index + 1, entry = dept)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "4,730",
-                                        color = Color.White,
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Total Points",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 12.sp
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "188",
-                                        color = Color.White,
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Students",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 12.sp
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "52.1 kg",
-                                        color = Color.White,
-                                        fontSize = 22.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "CO₂ Saved",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Campus impact card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "🌍 Campus Total Impact",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "%.1f kg CO₂".format(
+                                studentList.sumOf { it.carbonSaved }
+                            ),
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "tracked by ${studentList.size} students",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -268,67 +254,70 @@ fun LeaderboardScreen(onBack: () -> Unit) {
 
 @Composable
 fun TabButton(
-    text: String,
+    title: String,
     selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier,
+    onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier,
+        shape = RoundedCornerShape(50),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (selected) Color(0xFF2E7D32) else Color(0xFFE8F5E9),
-            contentColor = if (selected) Color.White else Color(0xFF2E7D32)
+            contentColor = if (selected) Color.White else Color.Gray
         )
     ) {
-        Text(text = text, fontSize = 13.sp)
+        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-fun PodiumCard(student: StudentEntry, medal: String, height: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = medal, fontSize = 28.sp)
+fun PodiumCard(
+    modifier: Modifier,
+    entry: StudentEntry,
+    rank: Int,
+    height: androidx.compose.ui.unit.Dp,
+    color: Color
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = entry.name.split(" ").firstOrNull() ?: entry.name,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1B5E20)
+        )
+        Text(
+            text = "${entry.points} pts",
+            fontSize = 11.sp,
+            color = Color.Gray
+        )
         Spacer(modifier = Modifier.height(4.dp))
         Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier.width(100.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height),
+            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = color)
         ) {
-            Column(
-                modifier = Modifier.padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Text(text = "👤", fontSize = 28.sp)
                 Text(
-                    text = student.name.split(" ").first(),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = Color(0xFF1B5E20)
-                )
-                Text(
-                    text = "${student.points} pts",
-                    fontSize = 11.sp,
-                    color = Color(0xFF43A047)
+                    text = when (rank) { 1 -> "🥇"; 2 -> "🥈"; else -> "🥉" },
+                    fontSize = 28.sp
                 )
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .width(100.dp)
-                .height(height.dp)
-                .background(
-                    Color(0xFF2E7D32),
-                    RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                )
-        )
     }
 }
 
 @Composable
-fun StudentRow(student: StudentEntry) {
+fun StudentRow(rank: Int, entry: StudentEntry) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -339,38 +328,36 @@ fun StudentRow(student: StudentEntry) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "#${student.rank}",
+                text = "#$rank",
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2E7D32),
-                fontSize = 16.sp,
                 modifier = Modifier.width(36.dp)
             )
-            Text(text = "👤", fontSize = 24.sp)
-            Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = student.name,
-                    fontWeight = FontWeight.SemiBold,
+                    text = entry.name,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = Color.Black
                 )
                 Text(
-                    text = student.department,
+                    text = "${entry.rollNo} • ${entry.department}",
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "${student.points} pts",
+                    text = "${entry.points} pts",
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2E7D32),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    color = Color(0xFF2E7D32)
                 )
                 Text(
-                    text = "-${student.carbonSaved}kg CO₂",
+                    text = "%.1f kg".format(entry.carbonSaved),
                     fontSize = 11.sp,
-                    color = Color(0xFF66BB6A)
+                    color = Color.Gray
                 )
             }
         }
@@ -378,46 +365,65 @@ fun StudentRow(student: StudentEntry) {
 }
 
 @Composable
-fun DeptRow(dept: DeptEntry) {
+fun DeptRow(rank: Int, entry: DeptEntry) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (dept.rank == 1) Color(0xFFE8F5E9) else Color.White
-        )
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = when (dept.rank) {
-                    1 -> "🥇"
-                    2 -> "🥈"
-                    3 -> "🥉"
-                    else -> "#${dept.rank}"
-                },
-                fontSize = 24.sp,
+                text = when (rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "#$rank" },
+                fontSize = 20.sp,
                 modifier = Modifier.width(40.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = dept.name,
+                    text = entry.name,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = Color(0xFF1B5E20)
+                    fontSize = 14.sp,
+                    color = Color.Black
                 )
                 Text(
-                    text = "${dept.members} students participating",
+                    text = "${entry.memberCount} students",
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
             }
             Text(
-                text = "${dept.totalPoints} pts",
+                text = "${entry.totalPoints} pts",
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2E7D32),
-                fontSize = 16.sp
+                fontSize = 14.sp,
+                color = Color(0xFF2E7D32)
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyLeaderboard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(40.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "🌱", fontSize = 48.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No entries yet!",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = Color(0xFF2E7D32)
+            )
+            Text(
+                text = "Be the first to log an activity",
+                fontSize = 13.sp,
+                color = Color.Gray
             )
         }
     }

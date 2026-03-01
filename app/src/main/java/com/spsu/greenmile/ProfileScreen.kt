@@ -1,5 +1,6 @@
 package com.spsu.greenmile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,8 @@ fun ProfileScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
+    BackHandler { onBack() }
+
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var rollNo by remember { mutableStateOf("") }
@@ -70,7 +73,6 @@ fun ProfileScreen(
         }
     }
 
-    // Logout Confirmation Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -121,7 +123,6 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(Color(0xFFF1F8E9))
     ) {
-        // Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -141,7 +142,6 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Avatar circle
                     Card(
                         shape = RoundedCornerShape(50),
                         colors = CardDefaults.cardColors(
@@ -203,7 +203,6 @@ fun ProfileScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                // Stats Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -230,7 +229,6 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Personal Info Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -261,7 +259,6 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Activity Summary Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -299,7 +296,6 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Badge Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -329,16 +325,11 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = when {
-                                totalPoints >= 500 ->
-                                    "Amazing! You're a campus sustainability leader!"
-                                totalPoints >= 300 ->
-                                    "Great work! Keep logging to reach Champion status!"
-                                totalPoints >= 100 ->
-                                    "Good start! You're making a real difference!"
-                                totalActivities > 0 ->
-                                    "Welcome! Keep logging to earn more points!"
-                                else ->
-                                    "Log your first activity to start your eco journey!"
+                                totalPoints >= 500 -> "Amazing! You're a campus sustainability leader!"
+                                totalPoints >= 300 -> "Great work! Keep logging to reach Champion status!"
+                                totalPoints >= 100 -> "Good start! You're making a real difference!"
+                                totalActivities > 0 -> "Welcome! Keep logging to earn more points!"
+                                else -> "Log your first activity to start your eco journey!"
                             },
                             fontSize = 13.sp,
                             color = Color.Gray
@@ -348,7 +339,6 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Logout Button
                 Button(
                     onClick = { showLogoutDialog = true },
                     modifier = Modifier

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
@@ -128,6 +129,8 @@ fun LogActivityScreen(
                 errorMsg = "Failed to save: ${e.message}"
             }
     }
+
+    BackHandler { onBack() }
 
     Column(
         modifier = Modifier
