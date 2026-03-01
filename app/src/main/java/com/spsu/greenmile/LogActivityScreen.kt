@@ -1,5 +1,6 @@
 package com.spsu.greenmile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,9 +16,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.spsu.greenmile.utils.LogValidator
+import com.spsu.greenmile.utils.StreakManager
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,6 +33,7 @@ fun LogActivityScreen(
     onBack: () -> Unit,
     onSubmit: () -> Unit
 ) {
+
     var selectedTravel by remember { mutableStateOf("") }
     var selectedFood by remember { mutableStateOf("") }
     var electricityHours by remember { mutableStateOf("") }
@@ -38,31 +43,36 @@ fun LogActivityScreen(
     var errorMsg by remember { mutableStateOf("") }
 
     val db = FirebaseFirestore.getInstance()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     fun calculateCarbon(): Double {
         var total = 0.0
+
         total += when (selectedTravel) {
             "Car" -> 3.0
             "Bike" -> 1.5
             "Bus" -> 0.8
-            "Cycle" -> 0.0
-            "Walk" -> 0.0
+            "Cycle", "Walk" -> 0.0
             else -> 1.0
         }
+
         total += when (selectedFood) {
             "Non-Veg" -> 3.5
             "Veg" -> 1.0
             "Junk Food" -> 2.0
             else -> 1.5
         }
+
         val hours = electricityHours.toDoubleOrNull() ?: 0.0
         total += hours * 0.5
+
         if (usedPlastic) total += 0.3
+
         return total
     }
 
     fun calculatePoints(carbon: Double): Int {
-        // Lower carbon = more points
         return when {
             carbon < 2.0 -> 50
             carbon < 3.0 -> 35
@@ -73,72 +83,84 @@ fun LogActivityScreen(
     }
 
     fun saveActivity() {
-        if (selectedTravel.isEmpty() || selectedFood.isEmpty()) {
-            errorMsg = "Please select travel and food options"
-            return
-        }
-        if (userId.isEmpty()) {
-            errorMsg = "User not logged in properly"
-            return
-        }
 
-        // Validate electricity input
-        val elecHours = electricityHours.toDoubleOrNull()
-        if (electricityHours.isNotEmpty() && (elecHours == null || elecHours < 0 || elecHours > 24)) {
-            errorMsg = "Electricity hours must be between 0 and 24"
-            return
-        }
+        scope.launch {
 
-        isLoading = true
-        errorMsg = ""
-        val carbon = calculateCarbon()
-        val points = calculatePoints(carbon)
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val canLog = LogValidator.canLogToday(userId)
 
-        // Save activity document
-        val activityData = hashMapOf(
-            "userId" to userId,
-            "userName" to userName,      // ADD THIS
-            "rollNo" to userRoll,        // ADD THIS
-            "date" to today,
-            "timestamp" to System.currentTimeMillis(),
-            "travel" to selectedTravel,
-            "food" to selectedFood,
-            "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
-            "usedPlastic" to usedPlastic,
-            "carbonKg" to carbon,
-            "pointsEarned" to points
-        )
+            if (!canLog) {
+                errorMsg = "You already logged today!"
+                return@launch
+            }
 
-        db.collection("activities")
-            .add(activityData)
-            .addOnSuccessListener {
-                // Update user totals
-                db.collection("users").document(userId)
-                    .update(
-                        mapOf(
-                            "totalPoints" to FieldValue.increment(points.toLong()),
-                            "totalCarbonSaved" to FieldValue.increment(carbon),
-                            "totalActivitiesLogged" to FieldValue.increment(1),
-                            "lastActiveDate" to today
+            if (selectedTravel.isEmpty() || selectedFood.isEmpty()) {
+                errorMsg = "Please select travel and food options"
+                return@launch
+            }
+
+            val elecHours = electricityHours.toDoubleOrNull()
+            if (electricityHours.isNotEmpty() &&
+                (elecHours == null || elecHours < 0 || elecHours > 24)
+            ) {
+                errorMsg = "Electricity hours must be between 0 and 24"
+                return@launch
+            }
+
+            isLoading = true
+            errorMsg = ""
+
+            val carbon = calculateCarbon()
+            val points = calculatePoints(carbon)
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+            val activityData = hashMapOf(
+                "userId" to userId,
+                "userName" to userName,
+                "rollNo" to userRoll,
+                "date" to today,
+                "timestamp" to System.currentTimeMillis(),
+                "travel" to selectedTravel,
+                "food" to selectedFood,
+                "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
+                "usedPlastic" to usedPlastic,
+                "carbonKg" to carbon,
+                "pointsEarned" to points
+            )
+
+            db.collection("activities")
+                .add(activityData)
+                .addOnSuccessListener {
+
+                    db.collection("users").document(userId)
+                        .update(
+                            mapOf(
+                                "totalPoints" to FieldValue.increment(points.toLong()),
+                                "totalCarbonSaved" to FieldValue.increment(carbon),
+                                "totalActivitiesLogged" to FieldValue.increment(1),
+                                "lastActiveDate" to today
+                            )
                         )
-                    )
-                    .addOnSuccessListener {
-                        isLoading = false
-                        successMsg = "Saved! +$points points earned 🌱"
-                        // Navigate after short delay
-                        onSubmit()
-                    }
-                    .addOnFailureListener {
-                        isLoading = false
-                        successMsg = "Activity saved! Points update pending."
-                        onSubmit()
-                    }
-            }
-            .addOnFailureListener { e ->
-                isLoading = false
-                errorMsg = "Failed to save: ${e.message}"
-            }
+                        .addOnSuccessListener {
+
+                            scope.launch {
+                                StreakManager.updateStreak(userId)
+                            }
+
+                            isLoading = false
+                            successMsg = "Saved! +$points points earned 🌱"
+                            onSubmit()
+                        }
+                        .addOnFailureListener {
+                            isLoading = false
+                            successMsg = "Activity saved! Points update pending."
+                            onSubmit()
+                        }
+                }
+                .addOnFailureListener { e ->
+                    isLoading = false
+                    errorMsg = "Failed to save: ${e.message}"
+                }
+        }
     }
 
     BackHandler { onBack() }
@@ -150,7 +172,7 @@ fun LogActivityScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        // Back
+
         Text(
             text = "← Back",
             color = Color(0xFF2E7D32),
@@ -166,135 +188,8 @@ fun LogActivityScreen(
             fontWeight = FontWeight.Bold,
             color = Color(0xFF1B5E20)
         )
-        Text(
-            text = "Track your choices to calculate carbon footprint",
-            fontSize = 13.sp,
-            color = Color.Gray
-        )
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        // TRAVEL
-        SectionTitle(emoji = "🚗", title = "How did you travel today?")
-        Spacer(modifier = Modifier.height(10.dp))
-
-        val travelOptions = listOf("🚗 Car", "🏍️ Bike", "🚌 Bus", "🚲 Cycle", "🚶 Walk")
-        OptionGrid(
-            options = travelOptions,
-            selected = selectedTravel,
-            onSelect = { selectedTravel = it }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // FOOD
-        SectionTitle(emoji = "🍽️", title = "What did you eat today?")
-        Spacer(modifier = Modifier.height(10.dp))
-
-        val foodOptions = listOf("🥩 Non-Veg", "🥗 Veg", "🍔 Junk Food")
-        OptionGrid(
-            options = foodOptions,
-            selected = selectedFood,
-            onSelect = { selectedFood = it }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ELECTRICITY
-        SectionTitle(emoji = "💡", title = "Electricity usage (hours)")
-        Spacer(modifier = Modifier.height(10.dp))
-        OutlinedTextField(
-            value = electricityHours,
-            onValueChange = { electricityHours = it },
-            label = { Text("Hours of AC/heavy appliance use") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
-            )
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // PLASTIC
-        SectionTitle(emoji = "♻️", title = "Plastic usage")
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            PlasticOption(
-                label = "Used Plastic ❌",
-                selected = usedPlastic,
-                modifier = Modifier.weight(1f),
-                onClick = { usedPlastic = true }
-            )
-            PlasticOption(
-                label = "Reusable ✅",
-                selected = !usedPlastic,
-                modifier = Modifier.weight(1f),
-                onClick = { usedPlastic = false }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // Carbon Preview
-        val carbonPreview = calculateCarbon()
-        val pointsPreview = calculatePoints(carbonPreview)
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (carbonPreview < 4.0) Color(0xFF2E7D32)
-                else Color(0xFFB71C1C)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Estimated Carbon Footprint",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 13.sp
-                )
-                Text(
-                    text = "%.1f kg CO₂".format(carbonPreview),
-                    color = Color.White,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (carbonPreview < 4.0) "🌱 Great effort! +$pointsPreview points"
-                    else "⚠️ Try greener choices! +$pointsPreview points",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        if (errorMsg.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
-            ) {
-                Text(
-                    text = "⚠️ $errorMsg",
-                    color = Color(0xFFB71C1C),
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(10.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = { saveActivity() },
@@ -314,7 +209,7 @@ fun LogActivityScreen(
                 )
             } else {
                 Text(
-                    text = "✅  Save Activity Log",
+                    text = "✅ Save Activity Log",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -322,97 +217,24 @@ fun LogActivityScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
-
-@Composable
-fun SectionTitle(emoji: String, title: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = emoji, fontSize = 20.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF1B5E20)
-        )
-    }
-}
-
-@Composable
-fun OptionGrid(
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    val rows = options.chunked(3)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { option ->
-                    val label = option.substringAfter(" ")
-                    val isSelected = selected == label
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (isSelected) Color(0xFF2E7D32) else Color.White,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (isSelected) Color(0xFF2E7D32) else Color(0xFFCCCCCC),
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable { onSelect(label) }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = option,
-                            fontSize = 13.sp,
-                            color = if (isSelected) Color.White else Color.DarkGray,
-                            fontWeight = if (isSelected) FontWeight.Bold
-                            else FontWeight.Normal
-                        )
-                    }
-                }
-                repeat(3 - row.size) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
+        if (errorMsg.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = errorMsg,
+                color = Color.Red,
+                fontSize = 13.sp
+            )
         }
-    }
-}
 
-@Composable
-fun PlasticOption(
-    label: String,
-    selected: Boolean,
-    modifier: Modifier,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .background(
-                if (selected) Color(0xFF2E7D32) else Color.White,
-                RoundedCornerShape(12.dp)
+        if (successMsg.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = successMsg,
+                color = Color(0xFF2E7D32),
+                fontSize = 13.sp
             )
-            .border(
-                1.dp,
-                if (selected) Color(0xFF2E7D32) else Color(0xFFCCCCCC),
-                RoundedCornerShape(12.dp)
-            )
-            .clickable { onClick() }
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            color = if (selected) Color.White else Color.DarkGray,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-        )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
