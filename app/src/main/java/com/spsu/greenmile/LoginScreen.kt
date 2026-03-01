@@ -21,26 +21,33 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun LoginScreen(onLoginSuccess: (String, String) -> Unit) {
-
     var isLoginMode by remember { mutableStateOf(true) }
+    var isForgotPassword by remember { mutableStateOf(false) }
 
-    if (isLoginMode) {
-        LoginForm(
-            onLoginSuccess = onLoginSuccess,
-            onSwitchToSignup = { isLoginMode = false }
+    when {
+        isForgotPassword -> ForgotPasswordForm(
+            onBack = { isForgotPassword = false }
         )
-    } else {
-        SignupForm(
+        isLoginMode -> LoginForm(
+            onLoginSuccess = onLoginSuccess,
+            onSwitchToSignup = { isLoginMode = false },
+            onForgotPassword = { isForgotPassword = true }
+        )
+        else -> SignupForm(
             onSignupSuccess = onLoginSuccess,
             onSwitchToLogin = { isLoginMode = true }
         )
     }
 }
 
+// ─────────────────────────────────────────
+// LOGIN FORM
+// ─────────────────────────────────────────
 @Composable
 fun LoginForm(
     onLoginSuccess: (String, String) -> Unit,
-    onSwitchToSignup: () -> Unit
+    onSwitchToSignup: () -> Unit,
+    onForgotPassword: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -79,7 +86,6 @@ fun LoginForm(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Login Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -102,7 +108,7 @@ fun LoginForm(
 
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { email = it.trim() },
                         label = { Text("College Email", color = Color(0xFF2E7D32)) },
                         placeholder = { Text("yourname@spsu.ac.in", color = Color.LightGray) },
                         modifier = Modifier.fillMaxWidth(),
@@ -138,54 +144,81 @@ fun LoginForm(
                         )
                     )
 
+                    // Forgot Password link
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Text(
+                            text = "Forgot Password?",
+                            color = Color(0xFF2E7D32),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickable { onForgotPassword() }
+                        )
+                    }
+
                     if (errorMsg.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMsg,
-                            color = Color.Red,
-                            fontSize = 12.sp
-                        )
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                        ) {
+                            Text(
+                                text = "⚠️ $errorMsg",
+                                color = Color(0xFFB71C1C),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
                         onClick = {
-                            if (email.isEmpty() || password.isEmpty()) {
-                                errorMsg = "Please fill all fields"
-                                return@Button
-                            }
-                            if (!email.endsWith("@spsu.ac.in")) {
-                                errorMsg = "Please use your SPSU college email (@spsu.ac.in)"
-                                return@Button
-                            }
-                            isLoading = true
-                            errorMsg = ""
-
-                            auth.signInWithEmailAndPassword(email, password)
-                                .addOnSuccessListener { result ->
-                                    val uid = result.user?.uid ?: ""
-                                    db.collection("users").document(uid).get()
-                                        .addOnSuccessListener { doc ->
-                                            val name = doc.getString("name") ?: "Student"
-                                            val roll = doc.getString("rollNo") ?: ""
-                                            isLoading = false
-                                            onLoginSuccess(name, roll)
+                            when {
+                                email.isEmpty() || password.isEmpty() ->
+                                    errorMsg = "Please fill all fields"
+                                !email.endsWith("@spsu.ac.in") ->
+                                    errorMsg = "Please use your SPSU email (@spsu.ac.in)"
+                                else -> {
+                                    isLoading = true
+                                    errorMsg = ""
+                                    auth.signInWithEmailAndPassword(email, password)
+                                        .addOnSuccessListener { result ->
+                                            val uid = result.user?.uid ?: ""
+                                            db.collection("users").document(uid).get()
+                                                .addOnSuccessListener { doc ->
+                                                    isLoading = false
+                                                    if (doc.exists()) {
+                                                        val name = doc.getString("name") ?: email.substringBefore("@")
+                                                        val roll = doc.getString("rollNo") ?: ""
+                                                        onLoginSuccess(name, roll)
+                                                    } else {
+                                                        onLoginSuccess(email.substringBefore("@"), "")
+                                                    }
+                                                }
+                                                .addOnFailureListener {
+                                                    isLoading = false
+                                                    onLoginSuccess(email.substringBefore("@"), "")
+                                                }
                                         }
-                                        .addOnFailureListener {
+                                        .addOnFailureListener { e ->
                                             isLoading = false
-                                            errorMsg = "Failed to load profile"
+                                            errorMsg = when {
+                                                e.message?.contains("password") == true ->
+                                                    "Wrong password. Try again."
+                                                e.message?.contains("no user") == true ||
+                                                        e.message?.contains("USER_NOT_FOUND") == true ->
+                                                    "No account found. Please sign up."
+                                                e.message?.contains("network") == true ->
+                                                    "No internet connection."
+                                                e.message?.contains("badly formatted") == true ->
+                                                    "Invalid email format."
+                                                else -> "Login failed: ${e.message}"
+                                            }
                                         }
                                 }
-                                .addOnFailureListener { e ->
-                                    isLoading = false
-                                    errorMsg = when {
-                                        e.message?.contains("password") == true -> "Wrong password"
-                                        e.message?.contains("no user") == true -> "No account found. Please sign up."
-                                        e.message?.contains("network") == true -> "No internet connection"
-                                        else -> "Login failed. Please try again."
-                                    }
-                                }
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -197,16 +230,9 @@ fun LoginForm(
                         enabled = !isLoading
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                         } else {
-                            Text(
-                                "Login",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -214,16 +240,11 @@ fun LoginForm(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Switch to Signup
             Row(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "New to GreenMile? ",
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
+                Text(text = "New to GreenMile? ", color = Color.Gray, fontSize = 14.sp)
                 Text(
                     text = "Sign Up",
                     color = Color(0xFF2E7D32),
@@ -236,6 +257,190 @@ fun LoginForm(
     }
 }
 
+// ─────────────────────────────────────────
+// FORGOT PASSWORD FORM
+// ─────────────────────────────────────────
+@Composable
+fun ForgotPasswordForm(onBack: () -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var successMsg by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf("") }
+
+    val auth = FirebaseAuth.getInstance()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F8E9))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(text = "🔑", fontSize = 64.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Reset Password",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E7D32)
+            )
+            Text(
+                text = "We'll send a reset link to your college email",
+                fontSize = 13.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it.trim() },
+                        label = { Text("College Email", color = Color(0xFF2E7D32)) },
+                        placeholder = { Text("yourname@spsu.ac.in", color = Color.LightGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedBorderColor = Color(0xFF2E7D32),
+                            unfocusedBorderColor = Color(0xFF81C784),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
+
+                    if (errorMsg.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                        ) {
+                            Text(
+                                text = "⚠️ $errorMsg",
+                                color = Color(0xFFB71C1C),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+
+                    if (successMsg.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                        ) {
+                            Text(
+                                text = "✅ $successMsg",
+                                color = Color(0xFF2E7D32),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            when {
+                                email.isEmpty() ->
+                                    errorMsg = "Please enter your email"
+                                !email.endsWith("@spsu.ac.in") ->
+                                    errorMsg = "Please use your SPSU email (@spsu.ac.in)"
+                                else -> {
+                                    isLoading = true
+                                    errorMsg = ""
+                                    successMsg = ""
+                                    auth.sendPasswordResetEmail(email)
+                                        .addOnSuccessListener {
+                                            isLoading = false
+                                            successMsg = "Reset link sent to $email. Check your inbox!"
+                                        }
+                                        .addOnFailureListener { e ->
+                                            isLoading = false
+                                            errorMsg = when {
+                                                e.message?.contains("no user") == true ||
+                                                        e.message?.contains("USER_NOT_FOUND") == true ->
+                                                    "No account found with this email."
+                                                e.message?.contains("network") == true ->
+                                                    "No internet connection."
+                                                else -> "Failed to send reset email."
+                                            }
+                                        }
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2E7D32)
+                        ),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                        } else {
+                            Text("Send Reset Link", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF2E7D32)
+                        )
+                    ) {
+                        Text("← Back to Login", fontSize = 16.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+            ) {
+                Text(
+                    text = "📧 Check your spam folder if you don't see the email within 2 minutes.",
+                    modifier = Modifier.padding(12.dp),
+                    fontSize = 12.sp,
+                    color = Color(0xFF2E7D32),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────
+// SIGNUP FORM
+// ─────────────────────────────────────────
 @Composable
 fun SignupForm(
     onSignupSuccess: (String, String) -> Unit,
@@ -292,7 +497,7 @@ fun SignupForm(
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
 
-                    // Student/Admin toggle
+                    // Student/Admin Toggle
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -324,7 +529,6 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Full Name
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -344,10 +548,9 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Roll Number
                     OutlinedTextField(
                         value = rollNo,
-                        onValueChange = { rollNo = it },
+                        onValueChange = { rollNo = it.trim() },
                         label = { Text(if (isStudent) "Roll Number" else "Employee ID", color = Color(0xFF2E7D32)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -364,10 +567,9 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // College Email
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { email = it.trim() },
                         label = { Text("College Email", color = Color(0xFF2E7D32)) },
                         placeholder = { Text("yourname@spsu.ac.in", color = Color.LightGray) },
                         modifier = Modifier.fillMaxWidth(),
@@ -385,7 +587,6 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Password
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -406,7 +607,6 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Department
                     Text(
                         text = "Department",
                         color = Color(0xFF2E7D32),
@@ -468,11 +668,17 @@ fun SignupForm(
 
                     if (errorMsg.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMsg,
-                            color = Color.Red,
-                            fontSize = 12.sp
-                        )
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                        ) {
+                            Text(
+                                text = "⚠️ $errorMsg",
+                                color = Color(0xFFB71C1C),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -480,10 +686,11 @@ fun SignupForm(
                     Button(
                         onClick = {
                             when {
-                                name.isEmpty() || rollNo.isEmpty() || email.isEmpty() || password.isEmpty() ->
+                                name.isEmpty() || rollNo.isEmpty() ||
+                                        email.isEmpty() || password.isEmpty() ->
                                     errorMsg = "Please fill all fields"
                                 !email.endsWith("@spsu.ac.in") ->
-                                    errorMsg = "Only SPSU college emails allowed (@spsu.ac.in)"
+                                    errorMsg = "Only SPSU emails allowed (@spsu.ac.in)"
                                 password.length < 6 ->
                                     errorMsg = "Password must be at least 6 characters"
                                 else -> {
@@ -493,7 +700,9 @@ fun SignupForm(
                                     auth.createUserWithEmailAndPassword(email, password)
                                         .addOnSuccessListener { result ->
                                             val uid = result.user?.uid ?: ""
-                                            val userDoc = mapOf(
+
+                                            // Fresh clean data for every new user
+                                            val freshUserData = hashMapOf(
                                                 "name" to name,
                                                 "rollNo" to rollNo,
                                                 "email" to email,
@@ -501,25 +710,37 @@ fun SignupForm(
                                                 "department" to department,
                                                 "totalPoints" to 0,
                                                 "totalCarbonSaved" to 0.0,
-                                                "createdAt" to System.currentTimeMillis()
+                                                "totalActivitiesLogged" to 0,
+                                                "currentStreak" to 0,
+                                                "totalSteps" to 0,
+                                                "joinedAt" to System.currentTimeMillis(),
+                                                "lastActiveDate" to ""
                                             )
-                                            db.collection("users").document(uid)
-                                                .set(userDoc)
+
+                                            db.collection("users")
+                                                .document(uid)
+                                                .set(freshUserData)
                                                 .addOnSuccessListener {
                                                     isLoading = false
                                                     onSignupSuccess(name, rollNo)
                                                 }
-                                                .addOnFailureListener {
+                                                .addOnFailureListener { e ->
                                                     isLoading = false
-                                                    errorMsg = "Account created but profile save failed"
+                                                    errorMsg = "Profile save failed: ${e.message}"
+                                                    // Still let them in
+                                                    onSignupSuccess(name, rollNo)
                                                 }
                                         }
                                         .addOnFailureListener { e ->
                                             isLoading = false
                                             errorMsg = when {
-                                                e.message?.contains("email") == true -> "Email already registered. Please login."
-                                                e.message?.contains("network") == true -> "No internet connection"
-                                                else -> "Signup failed. Try again."
+                                                e.message?.contains("email address is already") == true ->
+                                                    "Email already registered. Please login."
+                                                e.message?.contains("network") == true ->
+                                                    "No internet connection."
+                                                e.message?.contains("badly formatted") == true ->
+                                                    "Invalid email format."
+                                                else -> "Signup failed: ${e.message}"
                                             }
                                         }
                                 }
@@ -535,16 +756,9 @@ fun SignupForm(
                         enabled = !isLoading
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                         } else {
-                            Text(
-                                "Create Account",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -556,11 +770,7 @@ fun SignupForm(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Already have an account? ",
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
+                Text(text = "Already have an account? ", color = Color.Gray, fontSize = 14.sp)
                 Text(
                     text = "Login",
                     color = Color(0xFF2E7D32),
@@ -570,9 +780,8 @@ fun SignupForm(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Info note
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -587,7 +796,7 @@ fun SignupForm(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
