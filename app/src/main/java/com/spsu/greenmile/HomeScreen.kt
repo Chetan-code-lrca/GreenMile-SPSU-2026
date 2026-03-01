@@ -1,6 +1,7 @@
 package com.spsu.greenmile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -96,25 +97,38 @@ fun HomeScreen(
                     color = Color.Gray
                 )
             }
-            // Avatar
-            Card(
-                shape = RoundedCornerShape(50),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF2E7D32)
-                ),
-                modifier = Modifier.size(48.dp)
+
+            // ── Clickable Profile Circle ──
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickable { onViewProfile() }
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                Card(
+                    shape = RoundedCornerShape(50),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF2E7D32)
+                    ),
+                    modifier = Modifier.size(52.dp)
                 ) {
-                    Text(
-                        text = userName.first().uppercase(),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = userName.first().uppercase(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Profile",
+                    fontSize = 10.sp,
+                    color = Color(0xFF2E7D32),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
 
@@ -276,26 +290,6 @@ fun HomeScreen(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ── Profile ──
-            OutlinedButton(
-                onClick = onViewProfile,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF2E7D32)
-                )
-            ) {
-                Text(
-                    text = "👤  View My Profile",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
                 )
             }
 
