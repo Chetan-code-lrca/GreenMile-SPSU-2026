@@ -1,6 +1,7 @@
 package com.spsu.greenmile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,7 +20,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 @Composable
 fun ProfileScreen(
     userId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onLogout: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -32,6 +34,7 @@ fun ProfileScreen(
     var currentStreak by remember { mutableStateOf(0) }
     var joinedAt by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     val db = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -67,6 +70,52 @@ fun ProfileScreen(
         }
     }
 
+    // Logout Confirmation Dialog
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = {
+                Text(
+                    text = "Logout",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1B5E20)
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to logout from GreenMile?",
+                    color = Color.Gray
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        auth.signOut()
+                        showLogoutDialog = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFB71C1C)
+                    )
+                ) {
+                    Text("Yes, Logout", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showLogoutDialog = false },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF2E7D32)
+                    )
+                ) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -83,14 +132,16 @@ fun ProfileScreen(
                 Text(
                     text = "← Back",
                     color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(bottom = 12.dp),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .clickable { onBack() }
+                        .padding(bottom = 12.dp)
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Avatar
+                    // Avatar circle
                     Card(
                         shape = RoundedCornerShape(50),
                         colors = CardDefaults.cardColors(
@@ -139,7 +190,11 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF2E7D32))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Loading profile...", color = Color.Gray)
+                }
             }
         } else {
             Column(
@@ -148,7 +203,7 @@ fun ProfileScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                // Stats Cards
+                // Stats Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -190,14 +245,17 @@ fun ProfileScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         ProfileRow(label = "Full Name", value = name)
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(label = "Roll Number", value = rollNo)
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(label = "Department", value = department)
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(label = "Email", value = email)
-                        Divider(color = Color(0xFFE8F5E9))
-                        ProfileRow(label = "Role", value = role.replaceFirstChar { it.uppercase() })
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
+                        ProfileRow(
+                            label = "Role",
+                            value = role.replaceFirstChar { it.uppercase() }
+                        )
                     }
                 }
 
@@ -221,17 +279,17 @@ fun ProfileScreen(
                             label = "Total Activities Logged",
                             value = totalActivities.toString()
                         )
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(
                             label = "Total Carbon Tracked",
                             value = "%.2f kg CO₂".format(totalCarbon)
                         )
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(
                             label = "Green Points Earned",
                             value = "$totalPoints pts"
                         )
-                        Divider(color = Color(0xFFE8F5E9))
+                        HorizontalDivider(color = Color(0xFFE8F5E9))
                         ProfileRow(
                             label = "Current Streak",
                             value = "$currentStreak days 🔥"
@@ -271,11 +329,16 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = when {
-                                totalPoints >= 500 -> "Amazing! You're a campus sustainability leader!"
-                                totalPoints >= 300 -> "Great work! Keep logging to reach Champion status!"
-                                totalPoints >= 100 -> "Good start! You're making a real difference!"
-                                totalActivities > 0 -> "Welcome! Keep logging to earn more points!"
-                                else -> "Log your first activity to start your eco journey!"
+                                totalPoints >= 500 ->
+                                    "Amazing! You're a campus sustainability leader!"
+                                totalPoints >= 300 ->
+                                    "Great work! Keep logging to reach Champion status!"
+                                totalPoints >= 100 ->
+                                    "Good start! You're making a real difference!"
+                                totalActivities > 0 ->
+                                    "Welcome! Keep logging to earn more points!"
+                                else ->
+                                    "Log your first activity to start your eco journey!"
                             },
                             fontSize = 13.sp,
                             color = Color.Gray
@@ -283,14 +346,11 @@ fun ProfileScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Logout Button
                 Button(
-                    onClick = {
-                        auth.signOut()
-                        onBack()
-                    },
+                    onClick = { showLogoutDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -300,14 +360,14 @@ fun ProfileScreen(
                     )
                 ) {
                     Text(
-                        text = "🚪 Logout",
+                        text = "🚪  Logout",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }

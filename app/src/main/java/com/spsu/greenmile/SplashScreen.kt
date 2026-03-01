@@ -14,31 +14,36 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onNavigate: () -> Unit) {
-    LaunchedEffect(true) {
-        delay(2000)
-        onNavigate()
-    }
-
+    // Splash just shows UI — navigation is handled by MainActivity LaunchedEffect
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF2E7D32)),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "🌍", fontSize = 72.sp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(text = "🌍", fontSize = 80.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "GreenMile",
-                fontSize = 40.sp,
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Track. Save. Impact.",
-                fontSize = 16.sp,
+                text = "Campus Sustainability Platform",
+                fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = "SPSU • Udaipur",
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.6f)
             )
         }
     }
