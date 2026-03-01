@@ -34,11 +34,9 @@ class MainActivity : ComponentActivity() {
                     val auth = FirebaseAuth.getInstance()
                     val db = FirebaseFirestore.getInstance()
 
-                    // Check if user is already logged in
                     LaunchedEffect(Unit) {
                         val currentUser = auth.currentUser
                         if (currentUser != null) {
-                            // User is already logged in — load their profile
                             loggedInUid = currentUser.uid
                             db.collection("users").document(currentUser.uid).get()
                                 .addOnSuccessListener { doc ->
@@ -51,24 +49,21 @@ class MainActivity : ComponentActivity() {
                                         loggedInUser = currentUser.email
                                             ?.substringBefore("@") ?: "Student"
                                     }
-                                    // Skip login, go straight to home
                                     currentScreen = "home"
                                 }
                                 .addOnFailureListener {
-                                    // Firestore failed but user is logged in
                                     loggedInUser = currentUser.email
                                         ?.substringBefore("@") ?: "Student"
                                     currentScreen = "home"
                                 }
                         } else {
-                            // No user logged in — show login
                             currentScreen = "login"
                         }
                     }
 
                     when (currentScreen) {
                         "splash" -> SplashScreen(
-                            onNavigate = { /* handled by LaunchedEffect */ }
+                            onNavigate = { }
                         )
                         "login" -> LoginScreen(
                             onLoginSuccess = { name, roll ->
@@ -83,12 +78,20 @@ class MainActivity : ComponentActivity() {
                             userId = loggedInUid,
                             onLogActivity = { currentScreen = "log" },
                             onViewLeaderboard = { currentScreen = "leaderboard" },
-                            onViewProfile = { currentScreen = "profile" }
+                            onViewProfile = { currentScreen = "profile" },
+                            onViewHistory = { currentScreen = "history" },
+                            onViewAdmin = { currentScreen = "admin" }
                         )
                         "log" -> LogActivityScreen(
                             userId = loggedInUid,
+                            userName = loggedInUser,
+                            userRoll = loggedInRoll,
                             onBack = { currentScreen = "home" },
                             onSubmit = { currentScreen = "home" }
+                        )
+                        "admin" -> AdminScreen(
+                            userId = loggedInUid,
+                            onBack = { currentScreen = "home" }
                         )
                         "leaderboard" -> LeaderboardScreen(
                             onBack = { currentScreen = "home" }
@@ -97,12 +100,15 @@ class MainActivity : ComponentActivity() {
                             userId = loggedInUid,
                             onBack = { currentScreen = "home" },
                             onLogout = {
-                                // Clear all user data on logout
                                 loggedInUser = "Student"
                                 loggedInRoll = ""
                                 loggedInUid = ""
                                 currentScreen = "login"
                             }
+                        )
+                        "history" -> ActivityHistoryScreen(
+                            userId = loggedInUid,
+                            onBack = { currentScreen = "home" }
                         )
                     }
                 }

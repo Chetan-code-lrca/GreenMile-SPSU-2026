@@ -19,15 +19,19 @@ import com.google.firebase.firestore.FirebaseFirestore
 fun HomeScreen(
     userName: String = "Student",
     userId: String = "",
+    userRole: String = "student",
     onLogActivity: () -> Unit,
     onViewLeaderboard: () -> Unit,
-    onViewProfile: () -> Unit
+    onViewProfile: () -> Unit,
+    onViewHistory: () -> Unit,
+    onViewAdmin: () -> Unit = {}
 ) {
     var totalCarbon by remember { mutableStateOf(0.0) }
     var totalPoints by remember { mutableStateOf(0) }
     var totalActivities by remember { mutableStateOf(0) }
     var currentStreak by remember { mutableStateOf(0) }
     var department by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf(userRole) }
     var isLoading by remember { mutableStateOf(true) }
     var ecoTip by remember { mutableStateOf("Walk or cycle to campus to save up to 1.5 kg CO₂ daily!") }
 
@@ -42,7 +46,6 @@ fun HomeScreen(
         "🌱 Every small green choice adds up to a big campus impact!"
     )
 
-    // Load real user data
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
             db.collection("users").document(userId).get()
@@ -53,9 +56,9 @@ fun HomeScreen(
                         totalActivities = (doc.getLong("totalActivitiesLogged") ?: 0).toInt()
                         currentStreak = (doc.getLong("currentStreak") ?: 0).toInt()
                         department = doc.getString("department") ?: ""
+                        role = doc.getString("role") ?: "student"
                     }
                     isLoading = false
-                    // Pick random eco tip
                     ecoTip = ecoTips.random()
                 }
                 .addOnFailureListener {
@@ -73,7 +76,7 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        // Header
+        // ── Header ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -93,12 +96,13 @@ fun HomeScreen(
                     color = Color.Gray
                 )
             }
-            // Profile button
+            // Avatar
             Card(
                 shape = RoundedCornerShape(50),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)),
-                modifier = Modifier
-                    .size(48.dp)
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF2E7D32)
+                ),
+                modifier = Modifier.size(48.dp)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -108,8 +112,7 @@ fun HomeScreen(
                         text = userName.first().uppercase(),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(4.dp)
+                        color = Color.White
                     )
                 }
             }
@@ -127,7 +130,8 @@ fun HomeScreen(
                 CircularProgressIndicator(color = Color(0xFF2E7D32))
             }
         } else {
-            // Carbon Card
+
+            // ── Carbon Card ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -178,7 +182,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Stats Row
+            // ── Stats Row ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -205,7 +209,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Quick Actions
             Text(
                 text = "Quick Actions",
                 fontWeight = FontWeight.Bold,
@@ -215,7 +218,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Log Activity Button
+            // ── Log Activity ──
             Button(
                 onClick = onLogActivity,
                 modifier = Modifier
@@ -236,7 +239,28 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Leaderboard Button
+            // ── Activity History ──
+            Button(
+                onClick = onViewHistory,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00796B)
+                )
+            ) {
+                Text(
+                    text = "📋  Activity History",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Leaderboard ──
             Button(
                 onClick = onViewLeaderboard,
                 modifier = Modifier
@@ -257,7 +281,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Profile Button
+            // ── Profile ──
             OutlinedButton(
                 onClick = onViewProfile,
                 modifier = Modifier
@@ -275,9 +299,31 @@ fun HomeScreen(
                 )
             }
 
+            // ── Admin Panel — only visible to admins ──
+            if (role == "admin") {
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onViewAdmin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4A148C)
+                    )
+                ) {
+                    Text(
+                        text = "👑  Admin Panel",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Eco Tip Card
+            // ── Eco Tip ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -305,7 +351,7 @@ fun HomeScreen(
                 }
             }
 
-            // First time user message
+            // ── First time welcome card ──
             if (totalActivities == 0) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Card(

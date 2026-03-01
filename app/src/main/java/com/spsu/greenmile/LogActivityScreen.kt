@@ -24,6 +24,8 @@ import java.util.*
 @Composable
 fun LogActivityScreen(
     userId: String,
+    userName: String = "",
+    userRoll: String = "",
     onBack: () -> Unit,
     onSubmit: () -> Unit
 ) {
@@ -80,6 +82,13 @@ fun LogActivityScreen(
             return
         }
 
+        // Validate electricity input
+        val elecHours = electricityHours.toDoubleOrNull()
+        if (electricityHours.isNotEmpty() && (elecHours == null || elecHours < 0 || elecHours > 24)) {
+            errorMsg = "Electricity hours must be between 0 and 24"
+            return
+        }
+
         isLoading = true
         errorMsg = ""
         val carbon = calculateCarbon()
@@ -89,6 +98,8 @@ fun LogActivityScreen(
         // Save activity document
         val activityData = hashMapOf(
             "userId" to userId,
+            "userName" to userName,      // ADD THIS
+            "rollNo" to userRoll,        // ADD THIS
             "date" to today,
             "timestamp" to System.currentTimeMillis(),
             "travel" to selectedTravel,
