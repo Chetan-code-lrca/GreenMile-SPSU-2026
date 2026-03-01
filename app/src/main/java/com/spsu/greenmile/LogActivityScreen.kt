@@ -1,5 +1,6 @@
 package com.spsu.greenmile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.BackHandler
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
@@ -29,12 +29,13 @@ fun LogActivityScreen(
     onBack: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    BackHandler { onBack() }
+
     var selectedTravel by remember { mutableStateOf("") }
     var selectedFood by remember { mutableStateOf("") }
     var electricityHours by remember { mutableStateOf("") }
     var usedPlastic by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
-    var successMsg by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf("") }
 
     val db = FirebaseFirestore.getInstance()
@@ -62,7 +63,6 @@ fun LogActivityScreen(
     }
 
     fun calculatePoints(carbon: Double): Int {
-        // Lower carbon = more points
         return when {
             carbon < 2.0 -> 50
             carbon < 3.0 -> 35
@@ -82,66 +82,106 @@ fun LogActivityScreen(
             return
         }
 
-        // Validate electricity input
         val elecHours = electricityHours.toDoubleOrNull()
-        if (electricityHours.isNotEmpty() && (elecHours == null || elecHours < 0 || elecHours > 24)) {
+        if (electricityHours.isNotEmpty() &&
+            (elecHours == null || elecHours < 0 || elecHours > 24)
+        ) {
             errorMsg = "Electricity hours must be between 0 and 24"
             return
         }
 
         isLoading = true
         errorMsg = ""
-        val carbon = calculateCarbon()
-        val points = calculatePoints(carbon)
+
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-        // Save activity document
-        val activityData = hashMapOf(
-            "userId" to userId,
-            "userName" to userName,      // ADD THIS
-            "rollNo" to userRoll,        // ADD THIS
-            "date" to today,
-            "timestamp" to System.currentTimeMillis(),
-            "travel" to selectedTravel,
-            "food" to selectedFood,
-            "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
-            "usedPlastic" to usedPlastic,
-            "carbonKg" to carbon,
-            "pointsEarned" to points
-        )
-
+        // Check duplicate first
         db.collection("activities")
-            .add(activityData)
-            .addOnSuccessListener {
-                // Update user totals
-                db.collection("users").document(userId)
-                    .update(
-                        mapOf(
-                            "totalPoints" to FieldValue.increment(points.toLong()),
-                            "totalCarbonSaved" to FieldValue.increment(carbon),
-                            "totalActivitiesLogged" to FieldValue.increment(1),
-                            "lastActiveDate" to today
-                        )
-                    )
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("date", today)
+            .get()
+            .addOnSuccessListener { existing ->
+                if (!existing.isEmpty) {
+                    isLoading = false
+                    errorMsg = "You already logged today! Come back tomorrow 🌱"
+                    return@addOnSuccessListener
+                }
+
+                val carbon = calculateCarbon()
+                val points = calculatePoints(carbon)
+
+                val activityData = hashMapOf(
+                    "userId" to userId,
+                    "userName" to userName,
+                    "rollNo" to userRoll,
+                    "date" to today,
+                    "timestamp" to System.currentTimeMillis(),
+                    "travel" to selectedTravel,
+                    "food" to selectedFood,
+                    "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
+                    "usedPlastic" to usedPlastic,
+                    "carbonKg" to carbon,
+                    "pointsEarned" to points
+                )
+
+                db.collection("activities")
+                    .add(activityData)
                     .addOnSuccessListener {
-                        isLoading = false
-                        successMsg = "Saved! +$points points earned 🌱"
-                        // Navigate after short delay
-                        onSubmit()
+                        // Calculate streak
+                        db.collection("users").document(userId).get()
+                            .addOnSuccessListener { userDoc ->
+                                val lastActiveDate =
+                                    userDoc.getString("lastActiveDate") ?: ""
+                                val yesterday = SimpleDateFormat(
+                                    "yyyy-MM-dd", Locale.getDefault()
+                                ).format(Date(System.currentTimeMillis() - 86400000))
+
+                                val currentStreak =
+                                    (userDoc.getLong("currentStreak") ?: 0).toInt()
+
+                                val newStreak = when (lastActiveDate) {
+                                    yesterday -> currentStreak + 1
+                                    today -> currentStreak
+                                    else -> 1
+                                }
+
+                                db.collection("users").document(userId)
+                                    .update(
+                                        mapOf(
+                                            "totalPoints" to
+                                                    FieldValue.increment(points.toLong()),
+                                            "totalCarbonSaved" to
+                                                    FieldValue.increment(carbon),
+                                            "totalActivitiesLogged" to
+                                                    FieldValue.increment(1),
+                                            "lastActiveDate" to today,
+                                            "currentStreak" to newStreak
+                                        )
+                                    )
+                                    .addOnSuccessListener {
+                                        isLoading = false
+                                        onSubmit()
+                                    }
+                                    .addOnFailureListener {
+                                        isLoading = false
+                                        onSubmit()
+                                    }
+                            }
+                            .addOnFailureListener {
+                                isLoading = false
+                                onSubmit()
+                            }
                     }
-                    .addOnFailureListener {
+                    .addOnFailureListener { e ->
                         isLoading = false
-                        successMsg = "Activity saved! Points update pending."
-                        onSubmit()
+                        errorMsg = "Failed to save: ${e.message}"
                     }
             }
             .addOnFailureListener { e ->
                 isLoading = false
-                errorMsg = "Failed to save: ${e.message}"
+                errorMsg = "Failed to check duplicate: ${e.message}"
             }
     }
-
-    BackHandler { onBack() }
 
     Column(
         modifier = Modifier
@@ -150,7 +190,6 @@ fun LogActivityScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        // Back
         Text(
             text = "← Back",
             color = Color(0xFF2E7D32),
@@ -177,10 +216,8 @@ fun LogActivityScreen(
         // TRAVEL
         SectionTitle(emoji = "🚗", title = "How did you travel today?")
         Spacer(modifier = Modifier.height(10.dp))
-
-        val travelOptions = listOf("🚗 Car", "🏍️ Bike", "🚌 Bus", "🚲 Cycle", "🚶 Walk")
         OptionGrid(
-            options = travelOptions,
+            options = listOf("🚗 Car", "🏍️ Bike", "🚌 Bus", "🚲 Cycle", "🚶 Walk"),
             selected = selectedTravel,
             onSelect = { selectedTravel = it }
         )
@@ -190,10 +227,8 @@ fun LogActivityScreen(
         // FOOD
         SectionTitle(emoji = "🍽️", title = "What did you eat today?")
         Spacer(modifier = Modifier.height(10.dp))
-
-        val foodOptions = listOf("🥩 Non-Veg", "🥗 Veg", "🍔 Junk Food")
         OptionGrid(
-            options = foodOptions,
+            options = listOf("🥩 Non-Veg", "🥗 Veg", "🍔 Junk Food"),
             selected = selectedFood,
             onSelect = { selectedFood = it }
         )
@@ -206,7 +241,7 @@ fun LogActivityScreen(
         OutlinedTextField(
             value = electricityHours,
             onValueChange = { electricityHours = it },
-            label = { Text("Hours of AC/heavy appliance use") },
+            label = { Text("Hours of AC/heavy appliance use (0-24)") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             singleLine = true,
@@ -243,7 +278,7 @@ fun LogActivityScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Carbon Preview
+        // Carbon Preview Card
         val carbonPreview = calculateCarbon()
         val pointsPreview = calculatePoints(carbonPreview)
 
@@ -283,13 +318,18 @@ fun LogActivityScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Card(
                 shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                colors = CardDefaults.cardColors(
+                    containerColor = if (errorMsg.contains("already"))
+                        Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                )
             ) {
                 Text(
-                    text = "⚠️ $errorMsg",
-                    color = Color(0xFFB71C1C),
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(10.dp)
+                    text = if (errorMsg.contains("already")) "✅ $errorMsg"
+                    else "⚠️ $errorMsg",
+                    color = if (errorMsg.contains("already")) Color(0xFF2E7D32)
+                    else Color(0xFFB71C1C),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(12.dp)
                 )
             }
         }
