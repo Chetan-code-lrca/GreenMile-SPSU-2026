@@ -59,27 +59,15 @@ fun LogActivityScreen(
         return total
     }
 
-<<<<<<< HEAD
     fun calculatePoints(carbon: Double): Int = when {
         carbon < 2.0 -> 50
         carbon < 3.0 -> 35
         carbon < 4.0 -> 20
         carbon < 5.0 -> 10
         else -> 5
-=======
-    fun calculatePoints(carbon: Double): Int {
-        return when {
-            carbon < 2.0 -> 50
-            carbon < 3.0 -> 35
-            carbon < 4.0 -> 20
-            carbon < 5.0 -> 10
-            else -> 5
-        }
->>>>>>> main
     }
 
     fun saveActivity() {
-        // Validate using LogValidator
         val validationError = LogValidator.validate(selectedTravel, selectedFood, electricityHours)
         if (validationError != null) {
             errorMsg = validationError
@@ -90,7 +78,6 @@ fun LogActivityScreen(
             return
         }
 
-<<<<<<< HEAD
         isLoading = true
         errorMsg = ""
 
@@ -99,23 +86,7 @@ fun LogActivityScreen(
             java.util.Locale.getDefault()
         ).format(java.util.Date())
 
-        // Check for duplicate log today
-=======
-        val elecHours = electricityHours.toDoubleOrNull()
-        if (electricityHours.isNotEmpty() &&
-            (elecHours == null || elecHours < 0 || elecHours > 24)
-        ) {
-            errorMsg = "Electricity hours must be between 0 and 24"
-            return
-        }
-
-        isLoading = true
-        errorMsg = ""
-
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-
-        // Check duplicate first
->>>>>>> main
+        // Check duplicate log for today
         db.collection("activities")
             .whereEqualTo("userId", userId)
             .whereEqualTo("date", today)
@@ -144,7 +115,6 @@ fun LogActivityScreen(
                     "pointsEarned" to points
                 )
 
-<<<<<<< HEAD
                 db.collection("activities").add(activityData)
                     .addOnSuccessListener {
                         db.collection("users").document(userId)
@@ -156,7 +126,6 @@ fun LogActivityScreen(
                                 )
                             )
                             .addOnSuccessListener {
-                                // Update streak using StreakManager
                                 StreakManager.updateStreak(userId)
                                 isLoading = false
                                 successMsg = "Activity logged! +$points pts earned 🎉"
@@ -164,238 +133,28 @@ fun LogActivityScreen(
                             .addOnFailureListener {
                                 isLoading = false
                                 errorMsg = "Saved activity but failed to update stats"
-=======
-                db.collection("activities")
-                    .add(activityData)
-                    .addOnSuccessListener {
-                        // Calculate streak
-                        db.collection("users").document(userId).get()
-                            .addOnSuccessListener { userDoc ->
-                                val lastActiveDate =
-                                    userDoc.getString("lastActiveDate") ?: ""
-                                val yesterday = SimpleDateFormat(
-                                    "yyyy-MM-dd", Locale.getDefault()
-                                ).format(Date(System.currentTimeMillis() - 86400000))
-
-                                val currentStreak =
-                                    (userDoc.getLong("currentStreak") ?: 0).toInt()
-
-                                val newStreak = when (lastActiveDate) {
-                                    yesterday -> currentStreak + 1
-                                    today -> currentStreak
-                                    else -> 1
-                                }
-
-                                db.collection("users").document(userId)
-                                    .update(
-                                        mapOf(
-                                            "totalPoints" to
-                                                    FieldValue.increment(points.toLong()),
-                                            "totalCarbonSaved" to
-                                                    FieldValue.increment(carbon),
-                                            "totalActivitiesLogged" to
-                                                    FieldValue.increment(1),
-                                            "lastActiveDate" to today,
-                                            "currentStreak" to newStreak
-                                        )
-                                    )
-                                    .addOnSuccessListener {
-                                        isLoading = false
-                                        onSubmit()
-                                    }
-                                    .addOnFailureListener {
-                                        isLoading = false
-                                        onSubmit()
-                                    }
-                            }
-                            .addOnFailureListener {
-                                isLoading = false
-                                onSubmit()
->>>>>>> main
                             }
                     }
-                    .addOnFailureListener { e ->
+                    .addOnFailureListener {
                         isLoading = false
-<<<<<<< HEAD
                         errorMsg = "Failed to save. Please try again."
-=======
-                        errorMsg = "Failed to save: ${e.message}"
->>>>>>> main
                     }
             }
             .addOnFailureListener {
                 isLoading = false
-<<<<<<< HEAD
                 errorMsg = "Network error. Please check connection."
             }
     }
 
     val carbon = calculateCarbon()
 
-=======
-                errorMsg = "Failed to check duplicate: ${e.message}"
-            }
-    }
-
->>>>>>> main
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF1F8E9))
     ) {
-<<<<<<< HEAD
-        // Header
+        // ── Header ──
         Box(
-=======
-        Text(
-            text = "← Back",
-            color = Color(0xFF2E7D32),
-            modifier = Modifier.clickable { onBack() },
-            fontSize = 14.sp
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "Log Today's Activity",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1B5E20)
-        )
-        Text(
-            text = "Track your choices to calculate carbon footprint",
-            fontSize = 13.sp,
-            color = Color.Gray
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // TRAVEL
-        SectionTitle(emoji = "🚗", title = "How did you travel today?")
-        Spacer(modifier = Modifier.height(10.dp))
-        OptionGrid(
-            options = listOf("🚗 Car", "🏍️ Bike", "🚌 Bus", "🚲 Cycle", "🚶 Walk"),
-            selected = selectedTravel,
-            onSelect = { selectedTravel = it }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // FOOD
-        SectionTitle(emoji = "🍽️", title = "What did you eat today?")
-        Spacer(modifier = Modifier.height(10.dp))
-        OptionGrid(
-            options = listOf("🥩 Non-Veg", "🥗 Veg", "🍔 Junk Food"),
-            selected = selectedFood,
-            onSelect = { selectedFood = it }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ELECTRICITY
-        SectionTitle(emoji = "💡", title = "Electricity usage (hours)")
-        Spacer(modifier = Modifier.height(10.dp))
-        OutlinedTextField(
-            value = electricityHours,
-            onValueChange = { electricityHours = it },
-            label = { Text("Hours of AC/heavy appliance use (0-24)") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White
-            )
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // PLASTIC
-        SectionTitle(emoji = "♻️", title = "Plastic usage")
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            PlasticOption(
-                label = "Used Plastic ❌",
-                selected = usedPlastic,
-                modifier = Modifier.weight(1f),
-                onClick = { usedPlastic = true }
-            )
-            PlasticOption(
-                label = "Reusable ✅",
-                selected = !usedPlastic,
-                modifier = Modifier.weight(1f),
-                onClick = { usedPlastic = false }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // Carbon Preview Card
-        val carbonPreview = calculateCarbon()
-        val pointsPreview = calculatePoints(carbonPreview)
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (carbonPreview < 4.0) Color(0xFF2E7D32)
-                else Color(0xFFB71C1C)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Estimated Carbon Footprint",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 13.sp
-                )
-                Text(
-                    text = "%.1f kg CO₂".format(carbonPreview),
-                    color = Color.White,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (carbonPreview < 4.0) "🌱 Great effort! +$pointsPreview points"
-                    else "⚠️ Try greener choices! +$pointsPreview points",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        if (errorMsg.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (errorMsg.contains("already"))
-                        Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-                )
-            ) {
-                Text(
-                    text = if (errorMsg.contains("already")) "✅ $errorMsg"
-                    else "⚠️ $errorMsg",
-                    color = if (errorMsg.contains("already")) Color(0xFF2E7D32)
-                    else Color(0xFFB71C1C),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(12.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = { saveActivity() },
->>>>>>> main
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF2E7D32))
@@ -431,7 +190,7 @@ fun LogActivityScreen(
                 .padding(16.dp)
         ) {
 
-            // ── Travel Section ──
+            // ── Travel ──
             SectionTitle(emoji = "🚗", title = "How did you travel today?")
             Spacer(modifier = Modifier.height(8.dp))
             OptionGrid(
@@ -442,7 +201,7 @@ fun LogActivityScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Food Section ──
+            // ── Food ──
             SectionTitle(emoji = "🍽️", title = "What did you eat today?")
             Spacer(modifier = Modifier.height(8.dp))
             OptionGrid(
@@ -453,12 +212,14 @@ fun LogActivityScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Electricity Section ──
+            // ── Electricity ──
             SectionTitle(emoji = "💡", title = "Hours of AC/Electricity used?")
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = electricityHours,
-                onValueChange = { electricityHours = it.filter { c -> c.isDigit() || c == '.' } },
+                onValueChange = {
+                    electricityHours = it.filter { c -> c.isDigit() || c == '.' }
+                },
                 label = { Text("Hours (0–24)") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -471,7 +232,7 @@ fun LogActivityScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Plastic Section ──
+            // ── Plastic ──
             SectionTitle(emoji = "♻️", title = "Did you use single-use plastic?")
             Spacer(modifier = Modifier.height(8.dp))
             PlasticOption(
@@ -507,7 +268,8 @@ fun LogActivityScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (carbon < 4.0) "🌱 Great choice! You'll earn ${calculatePoints(carbon)} pts"
+                            text = if (carbon < 4.0)
+                                "🌱 Great choice! You'll earn ${calculatePoints(carbon)} pts"
                             else "⚠️ High carbon day. You'll earn ${calculatePoints(carbon)} pts",
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 13.sp
@@ -527,7 +289,7 @@ fun LogActivityScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // ── Error / Success Messages ──
+            // ── Error Message ──
             if (errorMsg.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -546,6 +308,7 @@ fun LogActivityScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            // ── Success Message ──
             if (successMsg.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -563,7 +326,6 @@ fun LogActivityScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-
                 Button(
                     onClick = onSubmit,
                     modifier = Modifier
@@ -582,7 +344,7 @@ fun LogActivityScreen(
                     )
                 }
             } else {
-                // ── Submit Button ──
+                // ── Save Button ──
                 Button(
                     onClick = { saveActivity() },
                     enabled = !isLoading,
@@ -615,7 +377,7 @@ fun LogActivityScreen(
     }
 }
 
-// ── Helper Composables ──
+// ── Helper Composables ──────────────────────────────────────
 
 @Composable
 fun SectionTitle(emoji: String, title: String) {
@@ -645,8 +407,7 @@ fun OptionGrid(
                     .clickable { onSelect(option) },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) Color(0xFF2E7D32)
-                    else Color.White
+                    containerColor = if (isSelected) Color(0xFF2E7D32) else Color.White
                 )
             ) {
                 Box(
