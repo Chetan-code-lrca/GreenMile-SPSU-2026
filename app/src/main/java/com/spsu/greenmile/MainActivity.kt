@@ -1,7 +1,5 @@
 package com.spsu.greenmile
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,32 +10,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.spsu.greenmile.ui.theme.GreenMileTheme
 
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // ✅ STEP SENSOR PERMISSION
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACTIVITY_RECOGNITION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACTIVITY_RECOGNITION),
-                100
-            )
-        }
-
         enableEdgeToEdge()
-
         setContent {
             GreenMileTheme {
                 Surface(
@@ -46,7 +26,6 @@ class MainActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                     color = Color(0xFFF1F8E9)
                 ) {
-
                     var currentScreen by remember { mutableStateOf("splash") }
                     var loggedInUser by remember { mutableStateOf("Student") }
                     var loggedInRoll by remember { mutableStateOf("") }
@@ -55,7 +34,6 @@ class MainActivity : ComponentActivity() {
                     val auth = FirebaseAuth.getInstance()
                     val db = FirebaseFirestore.getInstance()
 
-                    // ✅ AUTO LOGIN CHECK
                     LaunchedEffect(Unit) {
                         val currentUser = auth.currentUser
                         if (currentUser != null) {
@@ -68,16 +46,14 @@ class MainActivity : ComponentActivity() {
                                                     ?: "Student"
                                         loggedInRoll = doc.getString("rollNo") ?: ""
                                     } else {
-                                        loggedInUser =
-                                            currentUser.email?.substringBefore("@")
-                                                ?: "Student"
+                                        loggedInUser = currentUser.email
+                                            ?.substringBefore("@") ?: "Student"
                                     }
                                     currentScreen = "home"
                                 }
                                 .addOnFailureListener {
-                                    loggedInUser =
-                                        currentUser.email?.substringBefore("@")
-                                            ?: "Student"
+                                    loggedInUser = currentUser.email
+                                        ?.substringBefore("@") ?: "Student"
                                     currentScreen = "home"
                                 }
                         } else {
@@ -86,11 +62,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     when (currentScreen) {
-
                         "splash" -> SplashScreen(
                             onNavigate = { }
                         )
-
                         "login" -> LoginScreen(
                             onLoginSuccess = { name, roll ->
                                 loggedInUser = name
@@ -99,7 +73,6 @@ class MainActivity : ComponentActivity() {
                                 currentScreen = "home"
                             }
                         )
-
                         "home" -> HomeScreen(
                             userName = loggedInUser,
                             userId = loggedInUid,
@@ -107,15 +80,8 @@ class MainActivity : ComponentActivity() {
                             onViewLeaderboard = { currentScreen = "leaderboard" },
                             onViewProfile = { currentScreen = "profile" },
                             onViewHistory = { currentScreen = "history" },
-                            onViewAdmin = { currentScreen = "admin" },
-                            onOpenSteps = { currentScreen = "steps" } // ✅ NEW
+                            onViewAdmin = { currentScreen = "admin" }
                         )
-
-                        "steps" -> StepCounterScreen(
-                            userId = loggedInUid,
-                            onBack = { currentScreen = "home" } // ✅ Back support
-                        )
-
                         "log" -> LogActivityScreen(
                             userId = loggedInUid,
                             userName = loggedInUser,
@@ -123,16 +89,9 @@ class MainActivity : ComponentActivity() {
                             onBack = { currentScreen = "home" },
                             onSubmit = { currentScreen = "home" }
                         )
-
-                        "admin" -> AdminScreen(
-                            userId = loggedInUid,
-                            onBack = { currentScreen = "home" }
-                        )
-
                         "leaderboard" -> LeaderboardScreen(
                             onBack = { currentScreen = "home" }
                         )
-
                         "profile" -> ProfileScreen(
                             userId = loggedInUid,
                             onBack = { currentScreen = "home" },
@@ -143,8 +102,11 @@ class MainActivity : ComponentActivity() {
                                 currentScreen = "login"
                             }
                         )
-
                         "history" -> ActivityHistoryScreen(
+                            userId = loggedInUid,
+                            onBack = { currentScreen = "home" }
+                        )
+                        "admin" -> AdminScreen(
                             userId = loggedInUid,
                             onBack = { currentScreen = "home" }
                         )
