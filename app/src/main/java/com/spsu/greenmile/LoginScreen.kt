@@ -144,9 +144,13 @@ fun LoginForm(
                         )
                     )
 
-                    // Forgot Password link
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+                    // Forgot Password link
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
                         Text(
                             text = "Forgot Password?",
                             color = Color(0xFF2E7D32),
@@ -160,7 +164,9 @@ fun LoginForm(
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            )
                         ) {
                             Text(
                                 text = "⚠️ $errorMsg",
@@ -190,16 +196,21 @@ fun LoginForm(
                                                 .addOnSuccessListener { doc ->
                                                     isLoading = false
                                                     if (doc.exists()) {
-                                                        val name = doc.getString("name") ?: email.substringBefore("@")
+                                                        val name = doc.getString("name")
+                                                            ?: email.substringBefore("@")
                                                         val roll = doc.getString("rollNo") ?: ""
                                                         onLoginSuccess(name, roll)
                                                     } else {
-                                                        onLoginSuccess(email.substringBefore("@"), "")
+                                                        onLoginSuccess(
+                                                            email.substringBefore("@"), ""
+                                                        )
                                                     }
                                                 }
                                                 .addOnFailureListener {
                                                     isLoading = false
-                                                    onLoginSuccess(email.substringBefore("@"), "")
+                                                    onLoginSuccess(
+                                                        email.substringBefore("@"), ""
+                                                    )
                                                 }
                                         }
                                         .addOnFailureListener { e ->
@@ -230,9 +241,16 @@ fun LoginForm(
                         enabled = !isLoading
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         } else {
-                            Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Login",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -253,6 +271,8 @@ fun LoginForm(
                     modifier = Modifier.clickable { onSwitchToSignup() }
                 )
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
@@ -290,8 +310,9 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2E7D32)
             )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "We'll send a reset link to your college email",
+                text = "Enter the email you used to register.\nWe'll send a reset link there.",
                 fontSize = 13.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center
@@ -309,8 +330,13 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it.trim() },
-                        label = { Text("College Email", color = Color(0xFF2E7D32)) },
-                        placeholder = { Text("yourname@spsu.ac.in", color = Color.LightGray) },
+                        label = { Text("Registered Email", color = Color(0xFF2E7D32)) },
+                        placeholder = {
+                            Text(
+                                "yourname@spsu.ac.in or @gmail.com",
+                                color = Color.LightGray
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -328,7 +354,9 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            )
                         ) {
                             Text(
                                 text = "⚠️ $errorMsg",
@@ -343,14 +371,24 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
-                        ) {
-                            Text(
-                                text = "✅ $successMsg",
-                                color = Color(0xFF2E7D32),
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(10.dp)
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFE8F5E9)
                             )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "✅ Reset email sent!",
+                                    color = Color(0xFF2E7D32),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = successMsg,
+                                    color = Color(0xFF2E7D32),
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
 
@@ -361,8 +399,8 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                             when {
                                 email.isEmpty() ->
                                     errorMsg = "Please enter your email"
-                                !email.endsWith("@spsu.ac.in") ->
-                                    errorMsg = "Please use your SPSU email (@spsu.ac.in)"
+                                !email.contains("@") || !email.contains(".") ->
+                                    errorMsg = "Please enter a valid email address"
                                 else -> {
                                     isLoading = true
                                     errorMsg = ""
@@ -370,17 +408,23 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                                     auth.sendPasswordResetEmail(email)
                                         .addOnSuccessListener {
                                             isLoading = false
-                                            successMsg = "Reset link sent to $email. Check your inbox!"
+                                            successMsg =
+                                                "Check your inbox at $email\n\n" +
+                                                        "• Check Spam/Junk folder too\n" +
+                                                        "• College emails may delay — try Gmail if not received\n" +
+                                                        "• Link expires in 1 hour"
                                         }
                                         .addOnFailureListener { e ->
                                             isLoading = false
                                             errorMsg = when {
                                                 e.message?.contains("no user") == true ||
                                                         e.message?.contains("USER_NOT_FOUND") == true ->
-                                                    "No account found with this email."
+                                                    "No account found with this email. Please sign up first."
                                                 e.message?.contains("network") == true ->
-                                                    "No internet connection."
-                                                else -> "Failed to send reset email."
+                                                    "No internet connection. Check your WiFi."
+                                                e.message?.contains("badly formatted") == true ->
+                                                    "Invalid email format."
+                                                else -> "Failed: ${e.message}"
                                             }
                                         }
                                 }
@@ -396,9 +440,16 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
                         enabled = !isLoading
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         } else {
-                            Text("Send Reset Link", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Send Reset Link",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
@@ -424,16 +475,28 @@ fun ForgotPasswordForm(onBack: () -> Unit) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
             ) {
-                Text(
-                    text = "📧 Check your spam folder if you don't see the email within 2 minutes.",
-                    modifier = Modifier.padding(12.dp),
-                    fontSize = 12.sp,
-                    color = Color(0xFF2E7D32),
-                    textAlign = TextAlign.Center
-                )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "💡 Tips if you don't receive the email:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1565C0)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "• Check your Spam or Junk folder\n" +
+                                "• College emails may block external emails\n" +
+                                "• Try registering with Gmail instead\n" +
+                                "• Wait 2-3 minutes before trying again",
+                        fontSize = 12.sp,
+                        color = Color(0xFF1565C0)
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -508,7 +571,8 @@ fun SignupForm(
                             onClick = { isStudent = true },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isStudent) Color(0xFF2E7D32) else Color.Transparent,
+                                containerColor = if (isStudent) Color(0xFF2E7D32)
+                                else Color.Transparent,
                                 contentColor = if (isStudent) Color.White else Color.Gray
                             ),
                             elevation = null,
@@ -519,7 +583,8 @@ fun SignupForm(
                             onClick = { isStudent = false },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (!isStudent) Color(0xFF2E7D32) else Color.Transparent,
+                                containerColor = if (!isStudent) Color(0xFF2E7D32)
+                                else Color.Transparent,
                                 contentColor = if (!isStudent) Color.White else Color.Gray
                             ),
                             elevation = null,
@@ -529,6 +594,7 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Full Name
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -548,10 +614,16 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Roll Number
                     OutlinedTextField(
                         value = rollNo,
                         onValueChange = { rollNo = it.trim() },
-                        label = { Text(if (isStudent) "Roll Number" else "Employee ID", color = Color(0xFF2E7D32)) },
+                        label = {
+                            Text(
+                                if (isStudent) "Roll Number" else "Employee ID",
+                                color = Color(0xFF2E7D32)
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -567,11 +639,14 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // College Email
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it.trim() },
                         label = { Text("College Email", color = Color(0xFF2E7D32)) },
-                        placeholder = { Text("yourname@spsu.ac.in", color = Color.LightGray) },
+                        placeholder = {
+                            Text("yourname@spsu.ac.in", color = Color.LightGray)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
@@ -587,10 +662,13 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Password
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password (min 6 chars)", color = Color(0xFF2E7D32)) },
+                        label = {
+                            Text("Password (min 6 chars)", color = Color(0xFF2E7D32))
+                        },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -607,6 +685,7 @@ fun SignupForm(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Department
                     Text(
                         text = "Department",
                         color = Color(0xFF2E7D32),
@@ -623,7 +702,8 @@ fun SignupForm(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(
-                                        if (department == dept) Color(0xFF2E7D32) else Color(0xFFF1F8E9),
+                                        if (department == dept) Color(0xFF2E7D32)
+                                        else Color(0xFFF1F8E9),
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable { department = dept }
@@ -633,8 +713,10 @@ fun SignupForm(
                                 Text(
                                     text = dept,
                                     fontSize = 13.sp,
-                                    color = if (department == dept) Color.White else Color.DarkGray,
-                                    fontWeight = if (department == dept) FontWeight.Bold else FontWeight.Normal
+                                    color = if (department == dept) Color.White
+                                    else Color.DarkGray,
+                                    fontWeight = if (department == dept) FontWeight.Bold
+                                    else FontWeight.Normal
                                 )
                             }
                         }
@@ -649,7 +731,8 @@ fun SignupForm(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(
-                                        if (department == dept) Color(0xFF2E7D32) else Color(0xFFF1F8E9),
+                                        if (department == dept) Color(0xFF2E7D32)
+                                        else Color(0xFFF1F8E9),
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable { department = dept }
@@ -659,8 +742,10 @@ fun SignupForm(
                                 Text(
                                     text = dept,
                                     fontSize = 13.sp,
-                                    color = if (department == dept) Color.White else Color.DarkGray,
-                                    fontWeight = if (department == dept) FontWeight.Bold else FontWeight.Normal
+                                    color = if (department == dept) Color.White
+                                    else Color.DarkGray,
+                                    fontWeight = if (department == dept) FontWeight.Bold
+                                    else FontWeight.Normal
                                 )
                             }
                         }
@@ -670,7 +755,9 @@ fun SignupForm(
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            )
                         ) {
                             Text(
                                 text = "⚠️ $errorMsg",
@@ -726,7 +813,6 @@ fun SignupForm(
                                                 }
                                                 .addOnFailureListener { e ->
                                                     isLoading = false
-                                                    errorMsg = "Profile save failed: ${e.message}"
                                                     // Still let them in
                                                     onSignupSuccess(name, rollNo)
                                                 }
@@ -756,9 +842,16 @@ fun SignupForm(
                         enabled = !isLoading
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         } else {
-                            Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Create Account",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -770,7 +863,11 @@ fun SignupForm(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Already have an account? ", color = Color.Gray, fontSize = 14.sp)
+                Text(
+                    text = "Already have an account? ",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
                 Text(
                     text = "Login",
                     color = Color(0xFF2E7D32),
