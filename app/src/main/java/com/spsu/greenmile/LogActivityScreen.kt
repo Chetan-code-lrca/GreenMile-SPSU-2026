@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.spsu.greenmile.utils.StreakManager
+import com.spsu.greenmile.utils.LogValidator
 
 @Composable
 fun LogActivityScreen(

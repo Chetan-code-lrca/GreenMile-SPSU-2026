@@ -1,4 +1,4 @@
-package com.spsu.greenmile
+package com.spsu.greenmile.utils
 
 import com.google.firebase.firestore.FirebaseFirestore
 

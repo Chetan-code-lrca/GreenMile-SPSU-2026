@@ -25,6 +25,7 @@ fun HomeScreen(
     onViewLeaderboard: () -> Unit,
     onViewProfile: () -> Unit,
     onViewHistory: () -> Unit,
+    onViewSteps: () -> Unit,
     onViewAdmin: () -> Unit = {}
 ) {
     var totalCarbon by remember { mutableStateOf(0.0) }
@@ -250,6 +251,27 @@ fun HomeScreen(
             ) {
                 Text(
                     text = "➕  Log Today's Activity",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Step Counter ──
+            Button(
+                onClick = onViewSteps,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00838F)
+                )
+            ) {
+                Text(
+                    text = "👟  Step Counter",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

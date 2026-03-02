@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             GreenMileTheme {
                 Surface(
@@ -62,9 +63,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     when (currentScreen) {
-                        "splash" -> SplashScreen(
-                            onNavigate = { }
-                        )
+                        "splash" -> SplashScreen(onNavigate = { })
                         "login" -> LoginScreen(
                             onLoginSuccess = { name, roll ->
                                 loggedInUser = name
@@ -80,6 +79,7 @@ class MainActivity : ComponentActivity() {
                             onViewLeaderboard = { currentScreen = "leaderboard" },
                             onViewProfile = { currentScreen = "profile" },
                             onViewHistory = { currentScreen = "history" },
+                            onViewSteps = { currentScreen = "steps" },
                             onViewAdmin = { currentScreen = "admin" }
                         )
                         "log" -> LogActivityScreen(
@@ -104,6 +104,9 @@ class MainActivity : ComponentActivity() {
                         )
                         "history" -> ActivityHistoryScreen(
                             userId = loggedInUid,
+                            onBack = { currentScreen = "home" }
+                        )
+                        "steps" -> StepCounterScreen(
                             onBack = { currentScreen = "home" }
                         )
                         "admin" -> AdminScreen(
