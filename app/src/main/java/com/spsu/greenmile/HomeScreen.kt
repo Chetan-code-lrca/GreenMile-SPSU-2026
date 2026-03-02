@@ -321,7 +321,7 @@ fun HomeScreen(
             }
 
             // ── Admin Panel — only visible to admins ──
-            if (role == "admin") {
+            if (role == "admin" && (com.spsu.greenmile.utils.AuthManager.currentUser?.isEmailVerified == true)) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onViewAdmin,
