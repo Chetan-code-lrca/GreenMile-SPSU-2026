@@ -487,7 +487,14 @@ fun GreenTextField(
         } else null,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color(0xFF2E7D32),
-            focusedLabelColor = Color(0xFF2E7D32)
+            focusedLabelColor = Color(0xFF2E7D32),
+            unfocusedBorderColor = Color(0xFFBDBDBD),
+            unfocusedLabelColor = Color(0xFF757575),
+            focusedTextColor = Color.Black,
+            unfocusedTextColor = Color.Black,
+            cursorColor = Color(0xFF2E7D32),
+            focusedPlaceholderColor = Color(0xFFBDBDBD),
+            unfocusedPlaceholderColor = Color(0xFFBDBDBD)
         )
     )
 }

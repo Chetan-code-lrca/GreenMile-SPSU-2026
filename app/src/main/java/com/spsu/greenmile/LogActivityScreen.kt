@@ -12,13 +12,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.spsu.greenmile.utils.StreakManager
 import com.spsu.greenmile.utils.LogValidator
+import com.spsu.greenmile.utils.StreakManager
 
 @Composable
 fun LogActivityScreen(
@@ -30,6 +31,7 @@ fun LogActivityScreen(
 ) {
     BackHandler { onBack() }
 
+    val context = LocalContext.current
     var selectedTravel by remember { mutableStateOf("") }
     var selectedFood by remember { mutableStateOf("") }
     var electricityHours by remember { mutableStateOf("") }
@@ -37,8 +39,24 @@ fun LogActivityScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf("") }
     var successMsg by remember { mutableStateOf("") }
+    var autoFilledFromSteps by remember { mutableStateOf(false) }
+    var stepsUsed by remember { mutableStateOf(0) }
 
     val db = FirebaseFirestore.getInstance()
+
+    // ── Auto-fill distance when Walk is selected ──
+    LaunchedEffect(selectedTravel) {
+        if (selectedTravel == "Walk") {
+            val steps = StepCounterService.getStepsToday(context)
+            if (steps > 0) {
+                stepsUsed = steps
+                autoFilledFromSteps = true
+            }
+        } else {
+            autoFilledFromSteps = false
+            stepsUsed = 0
+        }
+    }
 
     fun calculateCarbon(): Double {
         var total = 0.0
@@ -84,11 +102,9 @@ fun LogActivityScreen(
         errorMsg = ""
 
         val today = java.text.SimpleDateFormat(
-            "yyyy-MM-dd",
-            java.util.Locale.getDefault()
+            "yyyy-MM-dd", java.util.Locale.getDefault()
         ).format(java.util.Date())
 
-        // Check duplicate log for today
         db.collection("activities")
             .whereEqualTo("userId", userId)
             .whereEqualTo("date", today)
@@ -102,6 +118,7 @@ fun LogActivityScreen(
 
                 val carbon = calculateCarbon()
                 val points = calculatePoints(carbon)
+                val kmWalked = if (autoFilledFromSteps) stepsUsed * 0.00075 else 0.0
 
                 val activityData = hashMapOf(
                     "userId" to userId,
@@ -114,7 +131,9 @@ fun LogActivityScreen(
                     "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
                     "usedPlastic" to usedPlastic,
                     "carbonKg" to carbon,
-                    "pointsEarned" to points
+                    "pointsEarned" to points,
+                    "stepsLogged" to if (autoFilledFromSteps) stepsUsed else 0,
+                    "kmWalked" to kmWalked
                 )
 
                 db.collection("activities").add(activityData)
@@ -128,9 +147,11 @@ fun LogActivityScreen(
                                 )
                             )
                             .addOnSuccessListener {
-                                StreakManager.updateStreak(userId)
-                                isLoading = false
-                                successMsg = "Activity logged! +$points pts earned 🎉"
+                                // ── Update streak after successful log ──
+                                StreakManager.updateStreak(userId) {
+                                    isLoading = false
+                                    successMsg = "Activity logged! +$points pts earned 🎉"
+                                }
                             }
                             .addOnFailureListener {
                                 isLoading = false
@@ -201,6 +222,37 @@ fun LogActivityScreen(
                 onSelect = { selectedTravel = it }
             )
 
+            // ── Walk auto-fill card ──
+            if (selectedTravel == "Walk" && autoFilledFromSteps) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "👟", fontSize = 22.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Auto-filled from Step Counter",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32)
+                            )
+                            Text(
+                                text = "$stepsUsed steps today  •  ${"%.2f".format(stepsUsed * 0.00075)} km walked",
+                                fontSize = 12.sp,
+                                color = Color(0xFF388E3C)
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // ── Food ──
@@ -228,7 +280,9 @@ fun LogActivityScreen(
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF2E7D32),
-                    focusedLabelColor = Color(0xFF2E7D32)
+                    focusedLabelColor = Color(0xFF2E7D32),
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black
                 )
             )
 
@@ -250,8 +304,7 @@ fun LogActivityScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (carbon < 4.0) Color(0xFF2E7D32)
-                        else Color(0xFFE65100)
+                        containerColor = if (carbon < 4.0) Color(0xFF2E7D32) else Color(0xFFE65100)
                     )
                 ) {
                     Column(
@@ -272,17 +325,15 @@ fun LogActivityScreen(
                         Text(
                             text = if (carbon < 4.0)
                                 "🌱 Great choice! You'll earn ${calculatePoints(carbon)} pts"
-                            else "⚠️ High carbon day. You'll earn ${calculatePoints(carbon)} pts",
+                            else
+                                "⚠️ High carbon day. You'll earn ${calculatePoints(carbon)} pts",
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 13.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        val barProgress = (carbon / 10.0).coerceIn(0.0, 1.0).toFloat()
                         LinearProgressIndicator(
-                            progress = { barProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp),
+                            progress = { (carbon / 10.0).coerceIn(0.0, 1.0).toFloat() },
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
                             color = Color.White,
                             trackColor = Color.White.copy(alpha = 0.3f)
                         )
@@ -291,14 +342,12 @@ fun LogActivityScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // ── Error Message ──
+            // ── Error ──
             if (errorMsg.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFEBEE)
-                    )
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
                 ) {
                     Text(
                         text = errorMsg,
@@ -310,14 +359,12 @@ fun LogActivityScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // ── Success Message ──
+            // ── Success ──
             if (successMsg.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFE8F5E9)
-                    )
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
                 ) {
                     Text(
                         text = successMsg,
@@ -330,46 +377,24 @@ fun LogActivityScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onSubmit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1B5E20)
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
                 ) {
-                    Text(
-                        "✅  Go to Home",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Text("✅  Go to Home", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             } else {
-                // ── Save Button ──
                 Button(
                     onClick = { saveActivity() },
                     enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF2E7D32)
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                     } else {
-                        Text(
-                            text = "💾  Save Activity",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Text("💾  Save Activity", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -378,8 +403,6 @@ fun LogActivityScreen(
         }
     }
 }
-
-// ── Helper Composables ──────────────────────────────────────
 
 @Composable
 fun SectionTitle(emoji: String, title: String) {
@@ -392,11 +415,7 @@ fun SectionTitle(emoji: String, title: String) {
 }
 
 @Composable
-fun OptionGrid(
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit
-) {
+fun OptionGrid(options: List<String>, selected: String, onSelect: (String) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -413,9 +432,7 @@ fun OptionGrid(
                 )
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -432,23 +449,16 @@ fun OptionGrid(
 
 @Composable
 fun PlasticOption(usedPlastic: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(
-            modifier = Modifier
-                .weight(1f)
-                .clickable { onToggle(true) },
+            modifier = Modifier.weight(1f).clickable { onToggle(true) },
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (usedPlastic) Color(0xFFE65100) else Color.White
             )
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 14.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -460,18 +470,14 @@ fun PlasticOption(usedPlastic: Boolean, onToggle: (Boolean) -> Unit) {
             }
         }
         Card(
-            modifier = Modifier
-                .weight(1f)
-                .clickable { onToggle(false) },
+            modifier = Modifier.weight(1f).clickable { onToggle(false) },
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (!usedPlastic) Color(0xFF2E7D32) else Color.White
             )
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 14.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

@@ -3,28 +3,43 @@ package com.spsu.greenmile
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.firebase.firestore.FirebaseFirestore
 import com.spsu.greenmile.ui.theme.GreenMileTheme
 import com.spsu.greenmile.utils.AuthManager
+import com.spsu.greenmile.utils.StreakManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+
+        // ── Black status bar ──
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.BLACK
+        window.navigationBarColor = android.graphics.Color.BLACK
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
+        // ── Schedule midnight step reset alarm ──
+        StepCounterService.scheduleMidnightReset(this)
 
         setContent {
             GreenMileTheme {
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()
-                        .safeDrawingPadding(),
+                        .statusBarsPadding()
+                        .navigationBarsPadding(),
                     color = Color(0xFFF1F8E9)
                 ) {
                     var currentScreen by remember { mutableStateOf("splash") }
@@ -35,11 +50,9 @@ class MainActivity : ComponentActivity() {
 
                     val db = FirebaseFirestore.getInstance()
 
-                    // ── On app start: check if user is already logged in + verified ──
                     LaunchedEffect(Unit) {
                         val currentUser = AuthManager.currentUser
                         if (currentUser != null) {
-                            // Reload to get latest verification status from Firebase
                             currentUser.reload().addOnSuccessListener {
                                 if (currentUser.isEmailVerified) {
                                     loggedInUid = currentUser.uid
@@ -52,13 +65,14 @@ class MainActivity : ComponentActivity() {
                                                 loggedInRoll = doc.getString("rollNo") ?: ""
                                                 loggedInRole = doc.getString("role") ?: "student"
                                             }
+                                            // ── Break streak if user missed a day ──
+                                            StreakManager.checkAndBreakStreakIfMissed(currentUser.uid)
                                             currentScreen = "home"
                                         }
                                         .addOnFailureListener {
                                             currentScreen = "home"
                                         }
                                 } else {
-                                    // Not verified — force back to login
                                     AuthManager.logout()
                                     currentScreen = "login"
                                 }
@@ -78,13 +92,12 @@ class MainActivity : ComponentActivity() {
                                 loggedInUser = name
                                 loggedInRoll = roll
                                 loggedInUid = AuthManager.currentUser?.uid ?: ""
-
-                                // Fetch role from Firestore after login
                                 if (loggedInUid.isNotEmpty()) {
                                     db.collection("users").document(loggedInUid).get()
                                         .addOnSuccessListener { doc ->
                                             loggedInRole = doc.getString("role") ?: "student"
                                         }
+                                    StreakManager.checkAndBreakStreakIfMissed(loggedInUid)
                                 }
                                 currentScreen = "home"
                             }
