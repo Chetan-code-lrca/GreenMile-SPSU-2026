@@ -44,7 +44,7 @@ fun LogActivityScreen(
 
     val db = FirebaseFirestore.getInstance()
 
-    // ── Auto-fill distance when Walk is selected ──
+    // ── Auto-fill when Walk selected ──
     LaunchedEffect(selectedTravel) {
         if (selectedTravel == "Walk") {
             val steps = StepCounterService.getStepsToday(context)
@@ -58,24 +58,31 @@ fun LogActivityScreen(
         }
     }
 
+    // ── Carbon calculation — strings match OptionGrid labels exactly ──
     fun calculateCarbon(): Double {
         var total = 0.0
-        total += when (selectedTravel) {
-            "Car" -> 3.0
-            "Bike" -> 1.5
-            "Bus" -> 0.8
-            "Cycle", "Walk" -> 0.0
-            else -> 1.0
+
+        total += when (selectedTravel.trim()) {
+            "Car"   -> 3.0
+            "Bike"  -> 1.5
+            "Bus"   -> 0.8
+            "Cycle" -> 0.0
+            "Walk"  -> 0.0
+            else    -> 0.0
         }
-        total += when (selectedFood) {
-            "Non-Veg" -> 3.5
-            "Veg" -> 1.0
+
+        total += when (selectedFood.trim()) {
+            "Non-Veg"   -> 3.5
+            "Veg"       -> 1.0
             "Junk Food" -> 2.0
-            else -> 1.5
+            else        -> 0.0
         }
+
         val hours = electricityHours.toDoubleOrNull() ?: 0.0
         total += hours * 0.5
+
         if (usedPlastic) total += 0.3
+
         return total
     }
 
@@ -84,7 +91,7 @@ fun LogActivityScreen(
         carbon < 3.0 -> 35
         carbon < 4.0 -> 20
         carbon < 5.0 -> 10
-        else -> 5
+        else         -> 5
     }
 
     fun saveActivity() {
@@ -118,22 +125,24 @@ fun LogActivityScreen(
 
                 val carbon = calculateCarbon()
                 val points = calculatePoints(carbon)
-                val kmWalked = if (autoFilledFromSteps) stepsUsed * 0.00075 else 0.0
+
+                // ── Round to avoid Firestore storing as integer ──
+                val carbonRounded = Math.round(carbon * 100.0) / 100.0
 
                 val activityData = hashMapOf(
-                    "userId" to userId,
-                    "userName" to userName,
-                    "rollNo" to userRoll,
-                    "date" to today,
-                    "timestamp" to System.currentTimeMillis(),
-                    "travel" to selectedTravel,
-                    "food" to selectedFood,
+                    "userId"           to userId,
+                    "userName"         to userName,
+                    "rollNo"           to userRoll,
+                    "date"             to today,
+                    "timestamp"        to System.currentTimeMillis(),
+                    "travel"           to selectedTravel,
+                    "food"             to selectedFood,
                     "electricityHours" to (electricityHours.toDoubleOrNull() ?: 0.0),
-                    "usedPlastic" to usedPlastic,
-                    "carbonKg" to carbon,
-                    "pointsEarned" to points,
-                    "stepsLogged" to if (autoFilledFromSteps) stepsUsed else 0,
-                    "kmWalked" to kmWalked
+                    "usedPlastic"      to usedPlastic,
+                    "carbonKg"         to carbonRounded,
+                    "pointsEarned"     to points,
+                    "stepsLogged"      to if (autoFilledFromSteps) stepsUsed else 0,
+                    "kmWalked"         to if (autoFilledFromSteps) stepsUsed * 0.00075 else 0.0
                 )
 
                 db.collection("activities").add(activityData)
@@ -141,13 +150,12 @@ fun LogActivityScreen(
                         db.collection("users").document(userId)
                             .update(
                                 mapOf(
-                                    "totalPoints" to FieldValue.increment(points.toLong()),
-                                    "totalCarbonSaved" to FieldValue.increment(carbon),
-                                    "totalActivitiesLogged" to FieldValue.increment(1)
+                                    "totalPoints"           to FieldValue.increment(points.toLong()),
+                                    "totalCarbonSaved"      to FieldValue.increment(carbonRounded),
+                                    "totalActivitiesLogged" to FieldValue.increment(1L)
                                 )
                             )
                             .addOnSuccessListener {
-                                // ── Update streak after successful log ──
                                 StreakManager.updateStreak(userId) {
                                     isLoading = false
                                     successMsg = "Activity logged! +$points pts earned 🎉"
@@ -291,10 +299,7 @@ fun LogActivityScreen(
             // ── Plastic ──
             SectionTitle(emoji = "♻️", title = "Did you use single-use plastic?")
             Spacer(modifier = Modifier.height(8.dp))
-            PlasticOption(
-                usedPlastic = usedPlastic,
-                onToggle = { usedPlastic = it }
-            )
+            PlasticOption(usedPlastic = usedPlastic, onToggle = { usedPlastic = it })
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -423,9 +428,7 @@ fun OptionGrid(options: List<String>, selected: String, onSelect: (String) -> Un
         options.forEach { option ->
             val isSelected = selected == option
             Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(option) },
+                modifier = Modifier.weight(1f).clickable { onSelect(option) },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) Color(0xFF2E7D32) else Color.White
@@ -457,10 +460,7 @@ fun PlasticOption(usedPlastic: Boolean, onToggle: (Boolean) -> Unit) {
                 containerColor = if (usedPlastic) Color(0xFFE65100) else Color.White
             )
         ) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "🛍️ Used Plastic",
                     fontWeight = if (usedPlastic) FontWeight.Bold else FontWeight.Normal,
@@ -476,10 +476,7 @@ fun PlasticOption(usedPlastic: Boolean, onToggle: (Boolean) -> Unit) {
                 containerColor = if (!usedPlastic) Color(0xFF2E7D32) else Color.White
             )
         ) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "♻️ Reusable",
                     fontWeight = if (!usedPlastic) FontWeight.Bold else FontWeight.Normal,
