@@ -114,12 +114,21 @@ object AuthManager {
     // ── Parse Firebase error messages into readable strings ──
     private fun parseAuthError(message: String): String = when {
         message.contains("email address is already in use") -> "This email is already registered"
-        message.contains("password is invalid") || message.contains("wrong-password") -> "Incorrect password"
-        message.contains("no user record") || message.contains("user-not-found") -> "No account found with this email"
+        message.contains("password is invalid") ||
+                message.contains("wrong-password") ||
+                message.contains("INVALID_LOGIN_CREDENTIALS") -> "Incorrect password"
+        message.contains("no user record") ||
+                message.contains("user-not-found") -> "No account found with this email"
         message.contains("badly formatted") -> "Invalid email format"
-        message.contains("weak-password") || message.contains("least 6") -> "Password must be at least 6 characters"
-        message.contains("network") -> "No internet connection"
-        message.contains("too-many-requests") -> "Too many attempts. Please try again later"
-        else -> "Something went wrong. Please try again"
+        message.contains("weak-password") ||
+                message.contains("least 6") -> "Password must be at least 6 characters"
+        message.contains("network") ||
+                message.contains("NETWORK") -> "No internet connection"
+        message.contains("too-many-requests") ||
+                message.contains("TOO_MANY_ATTEMPTS") -> "Too many attempts. Try again later"
+        message.contains("EMAIL_NOT_FOUND") -> "No account found with this email"
+        message.contains("INVALID_PASSWORD") -> "Incorrect password"
+        message.contains("disabled") -> "This account has been disabled"
+        else -> message // ← show actual Firebase error instead of hiding it
     }
 }
