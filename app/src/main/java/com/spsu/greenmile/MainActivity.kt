@@ -4,14 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.google.firebase.firestore.FirebaseFirestore
 import com.spsu.greenmile.ui.theme.GreenMileTheme
 import com.spsu.greenmile.utils.AuthManager
@@ -21,32 +17,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ── Black status bar ──
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // ── Show status bar and nav bar normally — no edge to edge ──
         window.statusBarColor = android.graphics.Color.BLACK
         window.navigationBarColor = android.graphics.Color.BLACK
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
-        }
-
-        // ── Schedule midnight step reset alarm ──
-        StepCounterService.scheduleMidnightReset(this)
 
         setContent {
             GreenMileTheme {
                 Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding(),
+                    modifier = Modifier.fillMaxSize(),
                     color = Color(0xFFF1F8E9)
                 ) {
-                    var currentScreen by remember { mutableStateOf("splash") }
-                    var loggedInUser by remember { mutableStateOf("Student") }
-                    var loggedInRoll by remember { mutableStateOf("") }
-                    var loggedInUid by remember { mutableStateOf("") }
-                    var loggedInRole by remember { mutableStateOf("student") }
+                    var currentScreen  by remember { mutableStateOf("splash") }
+                    var loggedInUser   by remember { mutableStateOf("Student") }
+                    var loggedInRoll   by remember { mutableStateOf("") }
+                    var loggedInUid    by remember { mutableStateOf("") }
+                    var loggedInRole   by remember { mutableStateOf("student") }
 
                     val db = FirebaseFirestore.getInstance()
 
@@ -65,7 +50,6 @@ class MainActivity : ComponentActivity() {
                                                 loggedInRoll = doc.getString("rollNo") ?: ""
                                                 loggedInRole = doc.getString("role") ?: "student"
                                             }
-                                            // ── Break streak if user missed a day ──
                                             StreakManager.checkAndBreakStreakIfMissed(currentUser.uid)
                                             currentScreen = "home"
                                         }
@@ -91,7 +75,7 @@ class MainActivity : ComponentActivity() {
                             onLoginSuccess = { name, roll ->
                                 loggedInUser = name
                                 loggedInRoll = roll
-                                loggedInUid = AuthManager.currentUser?.uid ?: ""
+                                loggedInUid  = AuthManager.currentUser?.uid ?: ""
                                 if (loggedInUid.isNotEmpty()) {
                                     db.collection("users").document(loggedInUid).get()
                                         .addOnSuccessListener { doc ->
@@ -104,22 +88,22 @@ class MainActivity : ComponentActivity() {
                         )
 
                         "home" -> HomeScreen(
-                            userName = loggedInUser,
-                            userId = loggedInUid,
-                            userRole = loggedInRole,
-                            onLogActivity = { currentScreen = "log" },
+                            userName       = loggedInUser,
+                            userId         = loggedInUid,
+                            userRole       = loggedInRole,
+                            onLogActivity  = { currentScreen = "log" },
                             onViewLeaderboard = { currentScreen = "leaderboard" },
-                            onViewProfile = { currentScreen = "profile" },
-                            onViewHistory = { currentScreen = "history" },
-                            onViewSteps = { currentScreen = "steps" },
-                            onViewAdmin = { currentScreen = "admin" }
+                            onViewProfile  = { currentScreen = "profile" },
+                            onViewHistory  = { currentScreen = "history" },
+                            onViewSteps    = { currentScreen = "steps" },
+                            onViewAdmin    = { currentScreen = "admin" }
                         )
 
                         "log" -> LogActivityScreen(
-                            userId = loggedInUid,
+                            userId   = loggedInUid,
                             userName = loggedInUser,
                             userRoll = loggedInRoll,
-                            onBack = { currentScreen = "home" },
+                            onBack   = { currentScreen = "home" },
                             onSubmit = { currentScreen = "home" }
                         )
 
@@ -128,13 +112,13 @@ class MainActivity : ComponentActivity() {
                         )
 
                         "profile" -> ProfileScreen(
-                            userId = loggedInUid,
-                            onBack = { currentScreen = "home" },
+                            userId  = loggedInUid,
+                            onBack  = { currentScreen = "home" },
                             onLogout = {
                                 AuthManager.logout()
                                 loggedInUser = "Student"
                                 loggedInRoll = ""
-                                loggedInUid = ""
+                                loggedInUid  = ""
                                 loggedInRole = "student"
                                 currentScreen = "login"
                             }
