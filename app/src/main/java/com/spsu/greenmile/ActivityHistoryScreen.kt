@@ -34,6 +34,7 @@ data class ActivityLog(
 @Composable
 fun ActivityHistoryScreen(
     userId: String,
+    isDark: Boolean = false,
     onBack: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -42,6 +43,11 @@ fun ActivityHistoryScreen(
     var isLoading by remember { mutableStateOf(true) }
     var totalCarbon by remember { mutableStateOf(0.0) }
     var totalPoints by remember { mutableStateOf(0) }
+
+    val bg      = if (isDark) Color(0xFF121212) else Color(0xFFF1F8E9)
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color.White       else Color(0xFF1B5E20)
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
 
     val db = FirebaseFirestore.getInstance()
 
@@ -80,7 +86,7 @@ fun ActivityHistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF1F8E9))
+            .background(bg)
     ) {
         // Header
         Box(
@@ -120,7 +126,7 @@ fun ActivityHistoryScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFF2E7D32))
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Loading history...", color = Color.Gray)
+                    Text("Loading history...", color = subClr)
                 }
             }
         } else if (activityList.isEmpty()) {
@@ -145,7 +151,7 @@ fun ActivityHistoryScreen(
                     Text(
                         text = "Start logging your daily activities to track your carbon footprint and earn green points!",
                         fontSize = 14.sp,
-                        color = Color.Gray,
+                        color = subClr,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(24.dp))
@@ -180,19 +186,22 @@ fun ActivityHistoryScreen(
                         modifier = Modifier.weight(1f),
                         emoji = "📋",
                         value = activityList.size.toString(),
-                        label = "Total Logs"
+                        label = "Total Logs",
+                        isDark = isDark
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         emoji = "🌍",
                         value = "%.1f".format(totalCarbon),
-                        label = "kg CO₂"
+                        label = "kg CO₂",
+                        isDark = isDark
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         emoji = "⭐",
                         value = totalPoints.toString(),
-                        label = "Points"
+                        label = "Points",
+                        isDark = isDark
                     )
                 }
 
@@ -244,14 +253,14 @@ fun ActivityHistoryScreen(
                     text = "Recent Logs",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
+                    color = textClr
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Activity log cards
                 activityList.forEach { log ->
-                    ActivityCard(log = log)
+                    ActivityCard(log = log, isDark = isDark)
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
@@ -262,15 +271,18 @@ fun ActivityHistoryScreen(
 }
 
 @Composable
-fun ActivityCard(log: ActivityLog) {
+fun ActivityCard(log: ActivityLog, isDark: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color.White       else Color.Black
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Top row — date and carbon
@@ -284,12 +296,12 @@ fun ActivityCard(log: ActivityLog) {
                         text = formatDate(log.date),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = Color.Black
+                        color = textClr
                     )
                     Text(
                         text = buildActivitySummary(log),
                         fontSize = 12.sp,
-                        color = Color.Gray
+                        color = subClr
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -319,20 +331,20 @@ fun ActivityCard(log: ActivityLog) {
                     .height(6.dp),
                 color = if (log.carbonKg < 4.0) Color(0xFF66BB6A)
                 else Color(0xFFEF5350),
-                trackColor = Color(0xFFE8F5E9)
+                trackColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8F5E9)
             )
 
             // Expanded details
             if (expanded) {
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Color(0xFFE8F5E9))
+                HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFE8F5E9))
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = "Activity Details",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
+                    color = if (isDark) Color(0xFF66BB6A) else Color(0xFF1B5E20)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -343,12 +355,14 @@ fun ActivityCard(log: ActivityLog) {
                     DetailChip(
                         modifier = Modifier.weight(1f),
                         emoji = travelEmoji(log.travel),
-                        label = log.travel.ifEmpty { "Not set" }
+                        label = log.travel.ifEmpty { "Not set" },
+                        isDark = isDark
                     )
                     DetailChip(
                         modifier = Modifier.weight(1f),
                         emoji = foodEmoji(log.food),
-                        label = log.food.ifEmpty { "Not set" }
+                        label = log.food.ifEmpty { "Not set" },
+                        isDark = isDark
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -359,12 +373,14 @@ fun ActivityCard(log: ActivityLog) {
                     DetailChip(
                         modifier = Modifier.weight(1f),
                         emoji = "💡",
-                        label = "${log.electricityHours}h AC"
+                        label = "${log.electricityHours}h AC",
+                        isDark = isDark
                     )
                     DetailChip(
                         modifier = Modifier.weight(1f),
                         emoji = if (log.usedPlastic) "♻️" else "✅",
-                        label = if (log.usedPlastic) "Used Plastic" else "No Plastic"
+                        label = if (log.usedPlastic) "Used Plastic" else "No Plastic",
+                        isDark = isDark
                     )
                 }
             }
@@ -374,7 +390,7 @@ fun ActivityCard(log: ActivityLog) {
             Text(
                 text = if (expanded) "▲ Show less" else "▼ Show details",
                 fontSize = 11.sp,
-                color = Color(0xFF2E7D32),
+                color = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32),
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -383,11 +399,11 @@ fun ActivityCard(log: ActivityLog) {
 }
 
 @Composable
-fun DetailChip(modifier: Modifier, emoji: String, label: String) {
+fun DetailChip(modifier: Modifier, emoji: String, label: String, isDark: Boolean = false) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9))
+        colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF1F8E9))
     ) {
         Row(
             modifier = Modifier.padding(8.dp),
@@ -399,7 +415,7 @@ fun DetailChip(modifier: Modifier, emoji: String, label: String) {
             Text(
                 text = label,
                 fontSize = 12.sp,
-                color = Color(0xFF1B5E20),
+                color = if (isDark) Color(0xFF66BB6A) else Color(0xFF1B5E20),
                 fontWeight = FontWeight.Medium
             )
         }

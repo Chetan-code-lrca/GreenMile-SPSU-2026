@@ -1,5 +1,6 @@
 package com.spsu.greenmile
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,377 +13,261 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun ProfileScreen(
     userId: String,
+    isDark: Boolean = false,
+    onDarkModeToggle: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
     BackHandler { onBack() }
 
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var rollNo by remember { mutableStateOf("") }
-    var department by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("") }
-    var totalPoints by remember { mutableStateOf(0) }
-    var totalCarbon by remember { mutableStateOf(0.0) }
+    val context = LocalContext.current
+
+    var name          by remember { mutableStateOf("") }
+    var rollNo        by remember { mutableStateOf("") }
+    var department    by remember { mutableStateOf("") }
+    var email         by remember { mutableStateOf("") }
+    var role          by remember { mutableStateOf("student") }
+    var totalPoints   by remember { mutableStateOf(0) }
+    var totalCarbon   by remember { mutableStateOf(0.0) }
     var totalActivities by remember { mutableStateOf(0) }
     var currentStreak by remember { mutableStateOf(0) }
-    var joinedAt by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(true) }
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var joinedDate    by remember { mutableStateOf("") }
+    var isLoading     by remember { mutableStateOf(true) }
+
+    // ── Theme colours ──
+    val bg       = if (isDark) Color(0xFF121212) else Color(0xFFF1F8E9)
+    val cardBg   = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textMain = if (isDark) Color.White       else Color(0xFF1B5E20)
+    val textSub  = if (isDark) Color(0xFFBBBBBB) else Color.Gray
+    val headerBg = Color(0xFF2E7D32)
 
     val db = FirebaseFirestore.getInstance()
-    val auth = FirebaseAuth.getInstance()
 
     LaunchedEffect(userId) {
-        if (userId.isNotEmpty()) {
-            db.collection("users").document(userId).get()
-                .addOnSuccessListener { doc ->
-                    if (doc.exists()) {
-                        name = doc.getString("name") ?: ""
-                        email = doc.getString("email") ?: ""
-                        rollNo = doc.getString("rollNo") ?: ""
-                        department = doc.getString("department") ?: ""
-                        role = doc.getString("role") ?: "student"
-                        totalPoints = (doc.getLong("totalPoints") ?: 0).toInt()
-                        totalCarbon = doc.getDouble("totalCarbonSaved") ?: 0.0
-                        totalActivities = (doc.getLong("totalActivitiesLogged") ?: 0).toInt()
-                        currentStreak = (doc.getLong("currentStreak") ?: 0).toInt()
-                        val ts = doc.getLong("joinedAt") ?: 0L
-                        if (ts > 0) {
-                            val date = java.util.Date(ts)
-                            joinedAt = java.text.SimpleDateFormat(
-                                "dd MMM yyyy",
-                                java.util.Locale.getDefault()
-                            ).format(date)
-                        }
+        if (userId.isEmpty()) { isLoading = false; return@LaunchedEffect }
+        db.collection("users").document(userId).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    name            = doc.getString("name") ?: ""
+                    rollNo          = doc.getString("rollNo") ?: ""
+                    department      = doc.getString("department") ?: ""
+                    email           = doc.getString("email") ?: ""
+                    role            = doc.getString("role") ?: "student"
+                    totalPoints     = (doc.getLong("totalPoints") ?: 0L).toInt()
+                    totalCarbon     = when (val r = doc.get("totalCarbonSaved")) {
+                        is Double -> r; is Long -> r.toDouble(); else -> 0.0
                     }
-                    isLoading = false
+                    totalActivities = (doc.getLong("totalActivitiesLogged") ?: 0L).toInt()
+                    currentStreak   = (doc.getLong("currentStreak") ?: 0L).toInt()
+                    val ts = doc.getLong("joinedAt") ?: 0L
+                    if (ts > 0) {
+                        joinedDate = java.text.SimpleDateFormat("dd MMM yyyy",
+                            java.util.Locale.getDefault()).format(java.util.Date(ts))
+                    }
                 }
-                .addOnFailureListener { isLoading = false }
-        } else {
-            isLoading = false
-        }
+                isLoading = false
+            }
+            .addOnFailureListener { isLoading = false }
     }
 
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = {
-                Text(
-                    text = "Logout",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to logout from GreenMile?",
-                    color = Color.Gray
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        auth.signOut()
-                        showLogoutDialog = false
-                        onLogout()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFB71C1C)
-                    )
-                ) {
-                    Text("Yes, Logout", color = Color.White)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { showLogoutDialog = false },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF2E7D32)
-                    )
-                ) {
-                    Text("Cancel")
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(16.dp)
-        )
+    val badge = when {
+        totalActivities >= 30 -> "🏆 Eco Champion"
+        totalCarbon >= 10.0   -> "🌍 Carbon Hero"
+        currentStreak >= 7    -> "🔥 Streak Master"
+        totalActivities >= 1  -> "🌎 New Joiner"
+        else                  -> "🌱 Getting Started"
+    }
+    val badgeDesc = when {
+        totalActivities >= 30 -> "Logged 30+ activities. True sustainability champion!"
+        totalCarbon >= 10.0   -> "Tracked over 10 kg CO₂. Keep going!"
+        currentStreak >= 7    -> "7-day streak achieved. Consistency is key!"
+        totalActivities >= 1  -> "Welcome! Keep logging to earn more points!"
+        else                  -> "Start logging activities to earn badges!"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF1F8E9))
+            .background(bg)
+            .verticalScroll(rememberScrollState())
     ) {
+        // ── Header ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF2E7D32))
+                .background(headerBg)
                 .padding(20.dp)
         ) {
             Column {
-                Text(
-                    text = "← Back",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .clickable { onBack() }
-                        .padding(bottom = 12.dp)
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                Text("← Back", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp,
+                    modifier = Modifier.clickable { onBack() }.padding(bottom = 12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Card(
-                        shape = RoundedCornerShape(50),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.White.copy(alpha = 0.2f)
-                        ),
-                        modifier = Modifier.size(64.dp)
+                        shape  = RoundedCornerShape(50),
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.2f)),
+                        modifier = Modifier.size(70.dp)
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = if (name.isNotEmpty()) name.first().uppercase() else "?",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text(
-                            text = name.ifEmpty { "Loading..." },
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = if (role == "admin") "👑 Admin" else "🎓 Student",
-                            fontSize = 13.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                        if (joinedAt.isNotEmpty()) {
-                            Text(
-                                text = "Joined $joinedAt",
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
+                        Text(name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(if (role == "admin") "👑 Admin" else "🎓 Student",
+                            fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
+                        if (joinedDate.isNotEmpty())
+                            Text("Joined $joinedDate", fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
                     }
                 }
             }
         }
 
         if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color(0xFF2E7D32))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Loading profile...", color = Color.Gray)
-                }
+            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF2E7D32))
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        emoji = "⭐",
-                        value = totalPoints.toString(),
-                        label = "Points"
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        emoji = "🌍",
-                        value = "%.1f".format(totalCarbon),
-                        label = "kg CO₂"
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        emoji = "🔥",
-                        value = currentStreak.toString(),
-                        label = "Streak"
-                    )
-                }
+            Column(modifier = Modifier.padding(16.dp)) {
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
+                // ── Personal Info ──
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "👤 Personal Information",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1B5E20)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        ProfileRow(label = "Full Name", value = name)
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(label = "Roll Number", value = rollNo)
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(label = "Department", value = department)
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(label = "Email", value = email)
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(
-                            label = "Role",
-                            value = role.replaceFirstChar { it.uppercase() }
-                        )
+                        ProfileRow("Full Name",   name,       textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Roll Number", rollNo,     textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Department",  department, textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Email",       email,      textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Role",        if (role == "admin") "Admin" else "Student", textMain, textSub)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
+                // ── Activity Summary ──
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "📊 Activity Summary",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1B5E20)
-                        )
+                        Text("📊 Activity Summary", fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp, color = textMain)
                         Spacer(modifier = Modifier.height(12.dp))
-                        ProfileRow(
-                            label = "Total Activities Logged",
-                            value = totalActivities.toString()
-                        )
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(
-                            label = "Total Carbon Tracked",
-                            value = "%.2f kg CO₂".format(totalCarbon)
-                        )
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(
-                            label = "Green Points Earned",
-                            value = "$totalPoints pts"
-                        )
-                        HorizontalDivider(color = Color(0xFFE8F5E9))
-                        ProfileRow(
-                            label = "Current Streak",
-                            value = "$currentStreak days 🔥"
-                        )
+                        ProfileRow("Total Activities Logged", totalActivities.toString(), textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Total Carbon Tracked", "%.2f kg CO₂".format(totalCarbon), textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Green Points Earned", "$totalPoints pts", textMain, textSub)
+                        HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                        ProfileRow("Current Streak", "$currentStreak days 🔥", textMain, textSub)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
-                ) {
+                // ── Badge ──
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDark) Color(0xFF1A2E1A) else Color(0xFFE8F5E9)
+                    )) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "🏅 Your Badge",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1B5E20)
-                        )
+                        Text("🏅 Your Badge", fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp, color = Color(0xFF2E7D32))
                         Spacer(modifier = Modifier.height(8.dp))
-                        val badge = when {
-                            totalPoints >= 500 -> "🌟 Eco Champion"
-                            totalPoints >= 300 -> "🌿 Green Warrior"
-                            totalPoints >= 100 -> "🌱 Eco Starter"
-                            totalActivities > 0 -> "🌍 New Joiner"
-                            else -> "👣 Just Getting Started"
-                        }
-                        Text(
-                            text = badge,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
-                        )
+                        Text(badge, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = when {
-                                totalPoints >= 500 -> "Amazing! You're a campus sustainability leader!"
-                                totalPoints >= 300 -> "Great work! Keep logging to reach Champion status!"
-                                totalPoints >= 100 -> "Good start! You're making a real difference!"
-                                totalActivities > 0 -> "Welcome! Keep logging to earn more points!"
-                                else -> "Log your first activity to start your eco journey!"
-                            },
-                            fontSize = 13.sp,
-                            color = Color.Gray
-                        )
+                        Text(badgeDesc, fontSize = 13.sp, color = textSub)
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Settings Card with Dark Mode Toggle ──
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("⚙️ Settings", fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp, color = textMain)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = if (isDark) "🌙 Dark Mode" else "☀️ Light Mode",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = textMain
+                                )
+                                Text(
+                                    text = "Tap to switch theme",
+                                    fontSize = 12.sp,
+                                    color = textSub
+                                )
+                            }
+                            Switch(
+                                checked = isDark,
+                                onCheckedChange = { newVal ->
+                                    onDarkModeToggle(newVal)
+                                    // Save to SharedPreferences
+                                    context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                                        .edit().putBoolean("isDarkMode", newVal).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor   = Color.White,
+                                    checkedTrackColor   = Color(0xFF2E7D32),
+                                    uncheckedThumbColor = Color.White,
+                                    uncheckedTrackColor = Color.Gray
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ── Logout ──
+                Button(
+                    onClick = onLogout,
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape    = RoundedCornerShape(14.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                ) {
+                    Text("🚪  Logout", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = { showLogoutDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFB71C1C)
-                    )
-                ) {
-                    Text(
-                        text = "🚪  Logout",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
 }
 
 @Composable
-fun ProfileRow(label: String, value: String) {
+fun ProfileRow(label: String, value: String, textMain: Color, textSub: Color) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = Color.Gray,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = value.ifEmpty { "—" },
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.Black
-        )
+        Text(label, fontSize = 14.sp, color = textSub)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = textMain)
     }
 }

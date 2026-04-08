@@ -13,613 +13,283 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-
-data class UserReport(
-    val uid: String,
-    val name: String,
-    val rollNo: String,
-    val department: String,
-    val totalPoints: Int,
-    val totalActivities: Int,
-    val totalCarbon: Double,
-    val role: String
-)
-
-data class ActivityReport(
-    val id: String,
-    val userName: String,
-    val rollNo: String,
-    val date: String,
-    val travel: String,
-    val food: String,
-    val electricityHours: Double,
-    val usedPlastic: Boolean,
-    val carbonKg: Double,
-    val pointsEarned: Int,
-    val flagged: Boolean
-)
 
 @Composable
-fun AdminScreen(
-    userId: String,
-    onBack: () -> Unit
-) {
+fun AdminScreen(userId: String, isDark: Boolean = false, onBack: () -> Unit) {
     BackHandler { onBack() }
 
-    var selectedTab by remember { mutableStateOf(0) }
-    var userList by remember { mutableStateOf<List<UserReport>>(emptyList()) }
-    var activityList by remember { mutableStateOf<List<ActivityReport>>(emptyList()) }
-    var isLoadingUsers by remember { mutableStateOf(true) }
-    var isLoadingActivities by remember { mutableStateOf(true) }
-    var totalUsersCount by remember { mutableStateOf(0) }
-    var totalActivitiesCount by remember { mutableStateOf(0) }
-    var totalCampusCarbon by remember { mutableStateOf(0.0) }
-    var isAdmin by remember { mutableStateOf(false) }
+    data class UserEntry(val id: String, val name: String, val dept: String,
+                         val points: Int, val role: String, val activities: Int)
+    data class LogEntry(val id: String, val userId: String, val userName: String,
+                        val date: String, val travel: String, val food: String,
+                        val carbon: Double, val points: Int, val suspicious: Boolean)
+
+    var selectedTab    by remember { mutableStateOf(0) }
+    var users          by remember { mutableStateOf<List<UserEntry>>(emptyList()) }
+    var logs           by remember { mutableStateOf<List<LogEntry>>(emptyList()) }
+    var totalStudents  by remember { mutableStateOf(0) }
+    var totalLogs      by remember { mutableStateOf(0) }
+    var totalCarbon    by remember { mutableStateOf(0.0) }
+    var deptBreakdown  by remember { mutableStateOf<Map<String, Pair<Int,Int>>>(emptyMap()) }
+    var isLoading      by remember { mutableStateOf(true) }
+    var statusMsg      by remember { mutableStateOf("") }
+
+    val bg      = if (isDark) Color(0xFF121212) else Color(0xFFF1F8E9)
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color.White       else Color(0xFF1B5E20)
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
 
     val db = FirebaseFirestore.getInstance()
 
-    // Check if user is admin
-    LaunchedEffect(userId) {
-        db.collection("users").document(userId).get()
-            .addOnSuccessListener { doc ->
-                isAdmin = doc.getString("role") == "admin"
+    fun loadData() {
+        isLoading = true
+        db.collection("users").get().addOnSuccessListener { userSnap ->
+            val uList = userSnap.documents.mapNotNull { doc ->
+                val name  = doc.getString("name") ?: return@mapNotNull null
+                val dept  = doc.getString("department") ?: "Unknown"
+                val pts   = (doc.getLong("totalPoints") ?: 0L).toInt()
+                val role  = doc.getString("role") ?: "student"
+                val acts  = (doc.getLong("totalActivitiesLogged") ?: 0L).toInt()
+                UserEntry(doc.id, name, dept, pts, role, acts)
             }
+            users         = uList
+            totalStudents = uList.count { it.role == "student" }
+
+            // Department breakdown
+            val dm = mutableMapOf<String, Pair<Int,Int>>()
+            uList.forEach { u ->
+                val d = u.dept.trim().uppercase()
+                val c = dm[d] ?: Pair(0,0)
+                dm[d] = Pair(c.first + u.points, c.second + 1)
+            }
+            deptBreakdown = dm
+
+            db.collection("activities").get().addOnSuccessListener { logSnap ->
+                var carbon = 0.0
+                val lList = logSnap.documents.mapNotNull { doc ->
+                    val uName   = doc.getString("userName") ?: ""
+                    val date    = doc.getString("date") ?: ""
+                    val travel  = doc.getString("travel") ?: ""
+                    val food    = doc.getString("food") ?: ""
+                    val c       = doc.getDouble("carbonKg") ?: 0.0
+                    val pts     = (doc.getLong("pointsEarned") ?: 0L).toInt()
+                    val uid     = doc.getString("userId") ?: ""
+                    carbon     += c
+                    // Flag suspicious if carbon > 12 or points > 45
+                    val susp    = c > 12.0 || pts > 45
+                    LogEntry(doc.id, uid, uName, date, travel, food, c, pts, susp)
+                }.sortedByDescending { it.date }
+
+                logs       = lList
+                totalLogs  = lList.size
+                totalCarbon = carbon
+                isLoading   = false
+            }.addOnFailureListener { isLoading = false }
+        }.addOnFailureListener { isLoading = false }
     }
 
-    // Load all users
-    LaunchedEffect(Unit) {
-        db.collection("users")
-            .orderBy("totalPoints", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { result ->
-                val users = result.documents.mapNotNull { doc ->
-                    UserReport(
-                        uid = doc.id,
-                        name = doc.getString("name") ?: "",
-                        rollNo = doc.getString("rollNo") ?: "",
-                        department = doc.getString("department") ?: "",
-                        totalPoints = (doc.getLong("totalPoints") ?: 0).toInt(),
-                        totalActivities = (doc.getLong("totalActivitiesLogged") ?: 0).toInt(),
-                        totalCarbon = doc.getDouble("totalCarbonSaved") ?: 0.0,
-                        role = doc.getString("role") ?: "student"
-                    )
-                }
-                userList = users
-                totalUsersCount = users.size
-                totalCampusCarbon = users.sumOf { it.totalCarbon }
-                isLoadingUsers = false
+    // ── Delete log AND recalculate user stats so leaderboard updates ──
+    fun deleteLog(log: LogEntry) {
+        db.collection("activities").document(log.id).delete()
+            .addOnSuccessListener {
+                // Recalculate user stats from remaining logs
+                db.collection("activities")
+                    .whereEqualTo("userId", log.userId)
+                    .get()
+                    .addOnSuccessListener { remaining ->
+                        var newCarbon = 0.0
+                        var newPoints = 0L
+                        val newCount  = remaining.size().toLong()
+                        remaining.documents.forEach { doc ->
+                            newCarbon += doc.getDouble("carbonKg") ?: 0.0
+                            newPoints += doc.getLong("pointsEarned") ?: 0L
+                        }
+                        val carbonRounded = Math.round(newCarbon * 100.0) / 100.0
+
+                        // Update user document with recalculated stats
+                        db.collection("users").document(log.userId)
+                            .update(mapOf(
+                                "totalPoints"           to newPoints,
+                                "totalCarbonSaved"      to carbonRounded,
+                                "totalActivitiesLogged" to newCount
+                            ))
+                            .addOnSuccessListener {
+                                statusMsg = "✅ Log deleted and user stats updated"
+                                loadData()
+                            }
+                            .addOnFailureListener {
+                                statusMsg = "Log deleted but stats update failed"
+                                loadData()
+                            }
+                    }
+                    .addOnFailureListener {
+                        statusMsg = "Log deleted but could not recalculate stats"
+                        loadData()
+                    }
             }
-            .addOnFailureListener { isLoadingUsers = false }
+            .addOnFailureListener { statusMsg = "❌ Failed to delete" }
     }
 
-    // Load all activities
-    LaunchedEffect(Unit) {
-        db.collection("activities")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(50)
-            .get()
-            .addOnSuccessListener { result ->
-                val activities = result.documents.mapNotNull { doc ->
-                    val carbon = doc.getDouble("carbonKg") ?: 0.0
-                    // Auto flag suspicious entries
-                    val isFlagged = carbon > 15.0 ||
-                            (doc.getDouble("electricityHours") ?: 0.0) > 20.0
+    LaunchedEffect(Unit) { loadData() }
 
-                    ActivityReport(
-                        id = doc.id,
-                        userName = doc.getString("userName") ?: "Unknown",
-                        rollNo = doc.getString("rollNo") ?: "",
-                        date = doc.getString("date") ?: "",
-                        travel = doc.getString("travel") ?: "",
-                        food = doc.getString("food") ?: "",
-                        electricityHours = doc.getDouble("electricityHours") ?: 0.0,
-                        usedPlastic = doc.getBoolean("usedPlastic") ?: false,
-                        carbonKg = carbon,
-                        pointsEarned = (doc.getLong("pointsEarned") ?: 0).toInt(),
-                        flagged = isFlagged
-                    )
-                }
-                activityList = activities
-                totalActivitiesCount = activities.size
-                isLoadingActivities = false
-            }
-            .addOnFailureListener { isLoadingActivities = false }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF1F8E9))
-    ) {
+    Column(modifier = Modifier.fillMaxSize().background(bg)) {
         // Header
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF1B5E20))
-                .padding(20.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF1B5E20)).padding(20.dp)) {
             Column {
-                Text(
-                    text = "← Back",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .clickable { onBack() }
-                        .padding(bottom = 8.dp)
-                )
-                Text(
-                    text = "👑 Admin Panel",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "GreenMile Management Dashboard",
-                    fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+                Text("← Back", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp,
+                    modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+                Text("👑 Admin Panel", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("GreenMile Management Dashboard", fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f))
             }
-        }
-
-        if (!isAdmin) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "🚫", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Access Denied",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFB71C1C)
-                    )
-                    Text(
-                        text = "Only admins can access this panel",
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-            return@Column
         }
 
         // Tabs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TabButton(
-                title = "📊 Overview",
-                selected = selectedTab == 0,
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 0 }
-            )
-            TabButton(
-                title = "👥 Users",
-                selected = selectedTab == 1,
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 1 }
-            )
-            TabButton(
-                title = "📋 Logs",
-                selected = selectedTab == 2,
-                modifier = Modifier.weight(1f),
-                onClick = { selectedTab = 2 }
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            when (selectedTab) {
-
-                // ── OVERVIEW TAB ──
-                0 -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            emoji = "👥",
-                            value = totalUsersCount.toString(),
-                            label = "Students"
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            emoji = "📋",
-                            value = totalActivitiesCount.toString(),
-                            label = "Logs"
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            emoji = "🌍",
-                            value = "%.0f".format(totalCampusCarbon),
-                            label = "kg CO₂"
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Flagged activities warning
-                    val flaggedCount = activityList.count { it.flagged }
-                    if (flaggedCount > 0) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFFFEBEE)
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = "⚠️", fontSize = 28.sp)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "$flaggedCount Suspicious Activities",
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFB71C1C),
-                                        fontSize = 15.sp
-                                    )
-                                    Text(
-                                        text = "Unusually high carbon values detected. Check Logs tab.",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFFB71C1C).copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    // Department breakdown
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "🏛️ Department Breakdown",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = Color(0xFF1B5E20)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            val deptStats = userList
-                                .groupBy { it.department }
-                                .mapValues { (_, users) ->
-                                    Triple(
-                                        users.size,
-                                        users.sumOf { it.totalPoints },
-                                        users.sumOf { it.totalCarbon }
-                                    )
-                                }
-                                .entries
-                                .sortedByDescending { it.value.second }
-
-                            deptStats.forEach { (dept, stats) ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = dept,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.Black
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text(
-                                            text = "${stats.first} students",
-                                            color = Color.Gray,
-                                            fontSize = 12.sp
-                                        )
-                                        Text(
-                                            text = "${stats.second} pts",
-                                            color = Color(0xFF2E7D32),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
-                                        )
-                                    }
-                                }
-                                HorizontalDivider(color = Color(0xFFE8F5E9))
-                            }
-                        }
-                    }
-                }
-
-                // ── USERS TAB ──
-                1 -> {
-                    if (isLoadingUsers) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF2E7D32))
-                        }
-                    } else {
-                        Text(
-                            text = "All Registered Students",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1B5E20)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        userList.forEachIndexed { index, user ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (user.role == "admin")
-                                        Color(0xFFE8F5E9) else Color.White
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Rank circle
-                                    Card(
-                                        shape = RoundedCornerShape(50),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = Color(0xFF2E7D32)
-                                        ),
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "${index + 1}",
-                                                color = Color.White,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = user.name,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp
-                                            )
-                                            if (user.role == "admin") {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "ADMIN",
-                                                    fontSize = 9.sp,
-                                                    color = Color.White,
-                                                    modifier = Modifier
-                                                        .background(
-                                                            Color(0xFF1B5E20),
-                                                            RoundedCornerShape(4.dp)
-                                                        )
-                                                        .padding(
-                                                            horizontal = 4.dp,
-                                                            vertical = 2.dp
-                                                        )
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "${user.rollNo} • ${user.department}",
-                                            fontSize = 12.sp,
-                                            color = Color.Gray
-                                        )
-                                        Text(
-                                            text = "${user.totalActivities} logs • %.1f kg CO₂".format(user.totalCarbon),
-                                            fontSize = 11.sp,
-                                            color = Color.Gray
-                                        )
-                                    }
-
-                                    Text(
-                                        text = "${user.totalPoints}\npts",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF2E7D32),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                // ── LOGS TAB ──
-                2 -> {
-                    if (isLoadingActivities) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(200.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF2E7D32))
-                        }
-                    } else {
-                        val flaggedActivities = activityList.filter { it.flagged }
-                        val normalActivities = activityList.filter { !it.flagged }
-
-                        // Flagged section
-                        if (flaggedActivities.isNotEmpty()) {
-                            Text(
-                                text = "⚠️ Suspicious Entries (${flaggedActivities.size})",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = Color(0xFFB71C1C)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            flaggedActivities.forEach { activity ->
-                                AdminActivityCard(activity = activity, db = db) {
-                                    activityList = activityList.filter { it.id != activity.id }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        // Normal section
-                        Text(
-                            text = "✅ Recent Logs (${normalActivities.size})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1B5E20)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        normalActivities.forEach { activity ->
-                            AdminActivityCard(activity = activity, db = db) {
-                                activityList = activityList.filter { it.id != activity.id }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
+        Row(modifier = Modifier.fillMaxWidth().background(if (isDark) Color(0xFF1E1E1E) else Color.White)) {
+            listOf("Overview", "Users", "Logs").forEachIndexed { i, label ->
+                val sel = selectedTab == i
+                Box(modifier = Modifier
+                    .weight(1f)
+                    .background(if (sel) Color(0xFF2E7D32) else Color.Transparent)
+                    .clickable { selectedTab = i }
+                    .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label,
+                        color      = if (sel) Color.White else subClr,
+                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                        fontSize   = 14.sp)
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(24.dp))
+        if (statusMsg.isNotEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape  = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (statusMsg.startsWith("✅")) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                )) {
+                Text(statusMsg, modifier = Modifier.padding(12.dp), fontSize = 13.sp,
+                    color = if (statusMsg.startsWith("✅")) Color(0xFF2E7D32) else Color(0xFFB71C1C))
+            }
+        }
+
+        if (isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF2E7D32))
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                when (selectedTab) {
+                    // ── OVERVIEW ──
+                    0 -> {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OverviewCard(Modifier.weight(1f), "👥", totalStudents.toString(), "Students", cardBg, textClr)
+                            OverviewCard(Modifier.weight(1f), "📋", totalLogs.toString(), "Logs", cardBg, textClr)
+                            OverviewCard(Modifier.weight(1f), "🌍", "%.0f".format(totalCarbon), "kg CO₂", cardBg, textClr)
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("🏛 Department Breakdown", fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp, color = textClr)
+                                Spacer(modifier = Modifier.height(10.dp))
+                                deptBreakdown.entries.sortedByDescending { it.value.first }.forEach { (dept, v) ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(dept, fontSize = 14.sp, color = textClr)
+                                        Row {
+                                            Text("${v.second} students", fontSize = 12.sp, color = subClr)
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("${v.first} pts", fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF2E7D32), fontSize = 14.sp)
+                                        }
+                                    }
+                                    HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE))
+                                }
+                            }
+                        }
+                    }
+
+                    // ── USERS ──
+                    1 -> {
+                        users.forEach { u ->
+                            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                shape  = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(u.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = textClr)
+                                        Text("${u.dept}  •  ${u.role}", fontSize = 12.sp, color = subClr)
+                                        Text("${u.activities} activities", fontSize = 11.sp, color = subClr)
+                                    }
+                                    Text("${u.points} pts", fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2E7D32), fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── LOGS ──
+                    2 -> {
+                        if (logs.isEmpty()) {
+                            Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                                Text("No logs found", color = subClr, fontSize = 14.sp)
+                            }
+                        } else {
+                            logs.forEach { log ->
+                                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    shape  = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (log.suspicious) Color(0xFFFFEBEE) else cardBg
+                                    )) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Column {
+                                                Text(log.userName, fontWeight = FontWeight.Bold,
+                                                    fontSize = 14.sp, color = if (log.suspicious) Color(0xFFB71C1C) else textClr)
+                                                Text("${log.date}  •  ${log.travel}  •  ${log.food}",
+                                                    fontSize = 12.sp, color = subClr)
+                                                Text("%.1f kg CO₂  •  ${log.points} pts".format(log.carbon),
+                                                    fontSize = 12.sp, color = subClr)
+                                                if (log.suspicious)
+                                                    Text("⚠️ Suspicious", fontSize = 11.sp,
+                                                        color = Color(0xFFB71C1C), fontWeight = FontWeight.Bold)
+                                            }
+                                            TextButton(
+                                                onClick = { deleteLog(log) },
+                                                colors  = ButtonDefaults.textButtonColors(
+                                                    contentColor = Color(0xFFD32F2F)
+                                                )
+                                            ) { Text("Delete", fontSize = 13.sp) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }
 
 @Composable
-fun AdminActivityCard(
-    activity: ActivityReport,
-    db: FirebaseFirestore,
-    onDeleted: () -> Unit
-) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = {
-                Text(
-                    "Delete Activity?",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFB71C1C)
-                )
-            },
-            text = {
-                Text(
-                    "This will permanently delete this activity log. " +
-                            "The user's points will NOT be automatically adjusted.",
-                    color = Color.Gray
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        db.collection("activities").document(activity.id)
-                            .delete()
-                            .addOnSuccessListener {
-                                showDeleteDialog = false
-                                onDeleted()
-                            }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFB71C1C)
-                    )
-                ) {
-                    Text("Delete", color = Color.White)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (activity.flagged) Color(0xFFFFEBEE) else Color.White
-        )
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (activity.flagged) {
-                            Text(text = "⚠️ ", fontSize = 14.sp)
-                        }
-                        Text(
-                            text = activity.userName.ifEmpty { "Unknown User" },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = if (activity.flagged) Color(0xFFB71C1C) else Color.Black
-                        )
-                    }
-                    Text(
-                        text = "${activity.rollNo} • ${activity.date}",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                    Text(
-                        text = "🚗 ${activity.travel.ifEmpty{"—"}} • 🍽️ ${activity.food.ifEmpty{"—"}} • 💡 ${activity.electricityHours}h",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "%.1f kg".format(activity.carbonKg),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = if (activity.flagged) Color(0xFFB71C1C)
-                        else Color(0xFF2E7D32)
-                    )
-                    Text(
-                        text = "+${activity.pointsEarned} pts",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "🗑️ Delete",
-                        fontSize = 12.sp,
-                        color = Color(0xFFB71C1C),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { showDeleteDialog = true }
-                    )
-                }
-            }
+fun OverviewCard(modifier: Modifier, emoji: String, value: String, label: String,
+                 cardBg: Color, textClr: Color) {
+    Card(modifier = modifier, shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)) {
+        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(emoji, fontSize = 24.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF2E7D32))
+            Text(label, fontSize = 11.sp, color = textClr)
         }
     }
 }

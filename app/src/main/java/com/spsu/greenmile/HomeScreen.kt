@@ -21,6 +21,7 @@ fun HomeScreen(
     userName: String = "Student",
     userId: String = "",
     userRole: String = "student",
+    isDark: Boolean = false,
     onLogActivity: () -> Unit,
     onViewLeaderboard: () -> Unit,
     onViewProfile: () -> Unit,
@@ -36,6 +37,11 @@ fun HomeScreen(
     var role by remember { mutableStateOf(userRole) }
     var isLoading by remember { mutableStateOf(true) }
     var ecoTip by remember { mutableStateOf("Walk or cycle to campus to save up to 1.5 kg CO₂ daily!") }
+
+    val bg      = if (isDark) Color(0xFF121212) else Color(0xFFF1F8E9)
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color.White       else Color(0xFF1B5E20)
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
 
     val db = FirebaseFirestore.getInstance()
 
@@ -78,7 +84,7 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF1F8E9))
+            .background(bg)
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
@@ -93,12 +99,12 @@ fun HomeScreen(
                     text = "Hello, $userName 👋",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B5E20)
+                    color = textClr
                 )
                 Text(
                     text = if (department.isNotEmpty()) "$department • SPSU" else "SPSU GreenMile",
                     fontSize = 13.sp,
-                    color = Color.Gray
+                    color = subClr
                 )
             }
             Column(
@@ -120,7 +126,7 @@ fun HomeScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
-                Text(text = "Profile", fontSize = 10.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
+                Text(text = "Profile", fontSize = 10.sp, color = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
             }
         }
 
@@ -180,19 +186,19 @@ fun HomeScreen(
 
             // ── Stats Row ──
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(modifier = Modifier.weight(1f), emoji = "⭐", value = totalPoints.toString(), label = "Green Points")
-                StatCard(modifier = Modifier.weight(1f), emoji = "📋", value = totalActivities.toString(), label = "Activities")
-                StatCard(modifier = Modifier.weight(1f), emoji = "🔥", value = currentStreak.toString(), label = "Day Streak")
+                StatCard(modifier = Modifier.weight(1f), emoji = "⭐", value = totalPoints.toString(), label = "Green Points", isDark = isDark)
+                StatCard(modifier = Modifier.weight(1f), emoji = "📋", value = totalActivities.toString(), label = "Activities", isDark = isDark)
+                StatCard(modifier = Modifier.weight(1f), emoji = "🔥", value = currentStreak.toString(), label = "Day Streak", isDark = isDark)
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
             // ── Weekly Chart ──
-            WeeklyChartCard(userId = userId)
+            WeeklyChartCard(userId = userId, isDark = isDark)
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Text(text = "Quick Actions", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1B5E20))
+            Text(text = "Quick Actions", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textClr)
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
@@ -256,14 +262,14 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1B2E1A) else Color(0xFFE8F5E9))
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "💡", fontSize = 28.sp)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(text = "Eco Tip of the Day", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), fontSize = 14.sp)
-                        Text(text = ecoTip, color = Color.Gray, fontSize = 12.sp)
+                        Text(text = "Eco Tip of the Day", fontWeight = FontWeight.Bold, color = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32), fontSize = 14.sp)
+                        Text(text = ecoTip, color = if (isDark) Color.LightGray else Color.Gray, fontSize = 12.sp)
                     }
                 }
             }
@@ -273,14 +279,14 @@ fun HomeScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF332B00) else Color(0xFFFFF9C4))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "🌟 Welcome to GreenMile!", fontWeight = FontWeight.Bold, color = Color(0xFFE65100), fontSize = 15.sp)
+                        Text(text = "🌟 Welcome to GreenMile!", fontWeight = FontWeight.Bold, color = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100), fontSize = 15.sp)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Start by logging today's activity to track your carbon footprint and earn your first green points!",
-                            color = Color(0xFFBF360C),
+                            color = if (isDark) Color(0xFFFFCC80) else Color(0xFFBF360C),
                             fontSize = 13.sp
                         )
                     }

@@ -1,5 +1,8 @@
 package com.spsu.greenmile
 
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,15 +20,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ── Show status bar and nav bar normally — no edge to edge ──
-        window.statusBarColor = android.graphics.Color.BLACK
+        window.statusBarColor     = android.graphics.Color.BLACK
         window.navigationBarColor = android.graphics.Color.BLACK
 
+        // ── Start step service on app launch ──
+        try {
+            val intent = Intent(this, StepCounterService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) { /* silent */ }
+
         setContent {
-            GreenMileTheme {
+            // ── Load saved theme preference ──
+            val prefs   = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            var isDark  by remember { mutableStateOf(prefs.getBoolean("isDarkMode", false)) }
+
+            GreenMileTheme(darkTheme = isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFFF1F8E9)
+                    color    = if (isDark) Color(0xFF121212) else Color(0xFFF1F8E9)
                 ) {
                     var currentScreen  by remember { mutableStateOf("splash") }
                     var loggedInUser   by remember { mutableStateOf("Student") }
@@ -53,16 +69,12 @@ class MainActivity : ComponentActivity() {
                                             StreakManager.checkAndBreakStreakIfMissed(currentUser.uid)
                                             currentScreen = "home"
                                         }
-                                        .addOnFailureListener {
-                                            currentScreen = "home"
-                                        }
+                                        .addOnFailureListener { currentScreen = "home" }
                                 } else {
                                     AuthManager.logout()
                                     currentScreen = "login"
                                 }
-                            }.addOnFailureListener {
-                                currentScreen = "login"
-                            }
+                            }.addOnFailureListener { currentScreen = "login" }
                         } else {
                             currentScreen = "login"
                         }
@@ -88,15 +100,16 @@ class MainActivity : ComponentActivity() {
                         )
 
                         "home" -> HomeScreen(
-                            userName       = loggedInUser,
-                            userId         = loggedInUid,
-                            userRole       = loggedInRole,
-                            onLogActivity  = { currentScreen = "log" },
+                            userName          = loggedInUser,
+                            userId            = loggedInUid,
+                            userRole          = loggedInRole,
+                            isDark            = isDark,
+                            onLogActivity     = { currentScreen = "log" },
                             onViewLeaderboard = { currentScreen = "leaderboard" },
-                            onViewProfile  = { currentScreen = "profile" },
-                            onViewHistory  = { currentScreen = "history" },
-                            onViewSteps    = { currentScreen = "steps" },
-                            onViewAdmin    = { currentScreen = "admin" }
+                            onViewProfile     = { currentScreen = "profile" },
+                            onViewHistory     = { currentScreen = "history" },
+                            onViewSteps       = { currentScreen = "steps" },
+                            onViewAdmin       = { currentScreen = "admin" }
                         )
 
                         "log" -> LogActivityScreen(
@@ -108,13 +121,16 @@ class MainActivity : ComponentActivity() {
                         )
 
                         "leaderboard" -> LeaderboardScreen(
+                            isDark = isDark,
                             onBack = { currentScreen = "home" }
                         )
 
                         "profile" -> ProfileScreen(
-                            userId  = loggedInUid,
-                            onBack  = { currentScreen = "home" },
-                            onLogout = {
+                            userId          = loggedInUid,
+                            isDark          = isDark,
+                            onDarkModeToggle = { newVal -> isDark = newVal },
+                            onBack          = { currentScreen = "home" },
+                            onLogout        = {
                                 AuthManager.logout()
                                 loggedInUser = "Student"
                                 loggedInRoll = ""
@@ -130,11 +146,13 @@ class MainActivity : ComponentActivity() {
                         )
 
                         "steps" -> StepCounterScreen(
+                            isDark = isDark,
                             onBack = { currentScreen = "home" }
                         )
 
                         "admin" -> AdminScreen(
                             userId = loggedInUid,
+                            isDark = isDark,
                             onBack = { currentScreen = "home" }
                         )
                     }

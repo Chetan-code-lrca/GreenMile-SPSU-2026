@@ -1,6 +1,7 @@
 package com.spsu.greenmile
 
 import android.content.Context
+import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -32,41 +33,39 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun StepCounterScreen(onBack: () -> Unit) {
+fun StepCounterScreen(onBack: () -> Unit, isDark: Boolean = false) {
     BackHandler { onBack() }
 
     val context    = LocalContext.current
     var stepsToday by remember { mutableStateOf(0) }
-    var permissionGranted by remember { mutableStateOf(false) }
-    val stepGoal = 10000
+    val stepGoal   = 10000
 
-    // ── Permission launcher ──
+    val bg      = if (isDark) Color(0xFF0D1B2A) else Color(0xFF0D1B2A)
+    val cardBg  = if (isDark) Color(0xFF1B2E3C) else Color(0xFF1B2E3C)
+    val accent  = Color(0xFF69F0AE)
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        permissionGranted = granted
+        if (granted) startStepService(context)
     }
 
-    // ── Request permission on first open ──
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             permissionLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
         } else {
-            permissionGranted = true
+            startStepService(context)
         }
+        stepsToday = StepCounterService.getStepsToday(context)
     }
 
-    // ── Read sensor directly — no service needed ──
-    DisposableEffect(permissionGranted) {
-        if (!permissionGranted) return@DisposableEffect onDispose { }
-
+    DisposableEffect(Unit) {
         val sm     = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor = sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
                 if (event?.sensor?.type != Sensor.TYPE_STEP_COUNTER) return
-
                 val sensorTotal = event.values[0]
                 val prefs       = context.getSharedPreferences(
                     StepCounterService.PREFS_NAME, Context.MODE_PRIVATE
@@ -75,295 +74,155 @@ fun StepCounterScreen(onBack: () -> Unit) {
                 val lastDate  = prefs.getString(StepCounterService.KEY_LAST_DATE, "")
                 val offsetSet = prefs.getBoolean(StepCounterService.KEY_OFFSET_SET, false)
 
-                if (lastDate != today) {
-                    // ── New day — reset offset ──
-                    prefs.edit()
-                        .putFloat(StepCounterService.KEY_STEPS_OFFSET, sensorTotal)
-                        .putString(StepCounterService.KEY_LAST_DATE, today)
-                        .putInt(StepCounterService.KEY_STEPS_TODAY, 0)
-                        .putBoolean(StepCounterService.KEY_OFFSET_SET, true)
-                        .apply()
-                    stepsToday = 0
-                    return
+                if (lastDate == today && offsetSet) {
+                    val offset = prefs.getFloat(StepCounterService.KEY_STEPS_OFFSET, sensorTotal)
+                    stepsToday = (sensorTotal - offset).toInt().coerceAtLeast(0)
                 }
-
-                if (!offsetSet) {
-                    // ── First reading today — lock offset ──
-                    prefs.edit()
-                        .putFloat(StepCounterService.KEY_STEPS_OFFSET, sensorTotal)
-                        .putString(StepCounterService.KEY_LAST_DATE, today)
-                        .putInt(StepCounterService.KEY_STEPS_TODAY, 0)
-                        .putBoolean(StepCounterService.KEY_OFFSET_SET, true)
-                        .apply()
-                    stepsToday = 0
-                    return
-                }
-
-                // ── Normal: subtract offset from total ──
-                val offset = prefs.getFloat(StepCounterService.KEY_STEPS_OFFSET, sensorTotal)
-                val steps  = (sensorTotal - offset).toInt().coerceAtLeast(0)
-
-                // Save to prefs
-                prefs.edit().putInt(StepCounterService.KEY_STEPS_TODAY, steps).apply()
-                stepsToday = steps
             }
-
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        if (sensor != null) {
-            sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-        }
-
-        // Load saved value immediately
+        sensor?.let { sm.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
         stepsToday = StepCounterService.getStepsToday(context)
 
-        onDispose {
-            sm.unregisterListener(listener)
-        }
+        onDispose { sm.unregisterListener(listener) }
     }
 
     val km       = stepsToday * 0.00075
     val kcal     = stepsToday * 0.03
     val progress = (stepsToday.toFloat() / stepGoal).coerceIn(0f, 1f)
-    val animatedProgress by animateFloatAsState(
+    val animProg by animateFloatAsState(
         targetValue   = progress,
-        animationSpec = tween(durationMillis = 800, easing = EaseOut),
-        label         = "progress"
+        animationSpec = tween(800, easing = EaseOut),
+        label         = "arc"
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D1B2A))
+            .background(bg)
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Header ──
+        // Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1B2E3C))
+                .background(cardBg)
                 .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
             Column {
-                Text(
-                    text     = "← Back",
-                    color    = Color(0xFF69F0AE),
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .clickable { onBack() }
-                        .padding(bottom = 8.dp)
-                )
-                Text(
-                    text       = "👟 Step Counter",
-                    fontSize   = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color      = Color.White
-                )
-                Text(
-                    text     = "Today's walking activity",
-                    fontSize = 13.sp,
-                    color    = Color.White.copy(alpha = 0.6f)
-                )
+                Text("← Back", color = accent, fontSize = 14.sp,
+                    modifier = Modifier.clickable { onBack() }.padding(bottom = 8.dp))
+                Text("👟 Step Counter", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Today's walking activity", fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
             }
         }
 
         Column(
-            modifier            = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
+            modifier            = Modifier.fillMaxWidth().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Permission warning ──
-            if (!permissionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape    = RoundedCornerShape(14.dp),
-                    colors   = CardDefaults.cardColors(containerColor = Color(0xFF4A148C))
-                ) {
-                    Column(
-                        modifier            = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text       = "🔒 Permission Required",
-                            color      = Color.White,
-                            fontSize   = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text     = "Please grant Activity Recognition permission to count your steps.",
-                            color    = Color.White.copy(alpha = 0.8f),
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                permissionLauncher.launch(
-                                    android.Manifest.permission.ACTIVITY_RECOGNITION
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF7B1FA2)
-                            )
-                        ) {
-                            Text("Grant Permission", color = Color.White)
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(20.dp))
-            }
-
-            // ── Circular Progress ──
-            Box(
-                modifier        = Modifier.size(260.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            // Circular Arc
+            Box(modifier = Modifier.size(260.dp), contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val stroke   = 28.dp.toPx()
                     val diameter = size.minDimension - stroke
-                    val tl       = Offset(
-                        (size.width - diameter) / 2f,
-                        (size.height - diameter) / 2f
-                    )
-                    val sz = Size(diameter, diameter)
-
-                    // Track ring
-                    drawArc(
-                        color      = Color.White.copy(alpha = 0.08f),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
-                        useCenter  = false,
-                        topLeft    = tl,
-                        size       = sz,
-                        style      = Stroke(width = stroke, cap = StrokeCap.Round)
-                    )
-                    // Progress ring
-                    if (animatedProgress > 0f) {
-                        drawArc(
-                            color      = Color(0xFF69F0AE),
-                            startAngle = -90f,
-                            sweepAngle = 360f * animatedProgress,
-                            useCenter  = false,
-                            topLeft    = tl,
-                            size       = sz,
-                            style      = Stroke(width = stroke, cap = StrokeCap.Round)
-                        )
+                    val tl       = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                    val sz       = Size(diameter, diameter)
+                    drawArc(Color.White.copy(alpha = 0.08f), 0f, 360f, false, tl, sz,
+                        style = Stroke(stroke, cap = StrokeCap.Round))
+                    if (animProg > 0f) {
+                        drawArc(accent, -90f, 360f * animProg, false, tl, sz,
+                            style = Stroke(stroke, cap = StrokeCap.Round))
                     }
                 }
-
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text       = "%,d".format(stepsToday),
-                        fontSize   = 52.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = Color.White
-                    )
-                    Text(
-                        text     = "steps",
-                        fontSize = 16.sp,
-                        color    = Color(0xFF69F0AE)
-                    )
+                    Text("%,d".format(stepsToday), fontSize = 52.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("steps", fontSize = 16.sp, color = accent)
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text     = "${(progress * 100).toInt()}% of $stepGoal daily goal",
-                color    = Color.White.copy(alpha = 0.5f),
-                fontSize = 13.sp
-            )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("${(progress * 100).toInt()}% of $stepGoal daily goal",
+                color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // ── Distance + Calories ──
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape    = RoundedCornerShape(18.dp),
-                    colors   = CardDefaults.cardColors(containerColor = Color(0xFF1B2E3C))
-                ) {
-                    Column(
-                        modifier            = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(text = "📍", fontSize = 26.sp)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("📍", fontSize = 26.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text       = "%.2f".format(km),
-                            fontSize   = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color      = Color.White
-                        )
-                        Text(text = "km",       fontSize = 12.sp, color = Color(0xFF69F0AE))
-                        Text(text = "Distance", fontSize = 11.sp, color = Color.White.copy(alpha = 0.4f))
+                        Text("%.2f".format(km), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("km", fontSize = 12.sp, color = accent)
+                        Text("Distance", fontSize = 11.sp, color = Color.White.copy(alpha = 0.4f))
                     }
                 }
-
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape    = RoundedCornerShape(18.dp),
-                    colors   = CardDefaults.cardColors(containerColor = Color(0xFF1B2E3C))
-                ) {
-                    Column(
-                        modifier            = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(text = "🔥", fontSize = 26.sp)
+                Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🔥", fontSize = 26.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text       = "%.0f".format(kcal),
-                            fontSize   = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color      = Color.White
-                        )
-                        Text(text = "kcal",     fontSize = 12.sp, color = Color(0xFFFF7043))
-                        Text(text = "Calories", fontSize = 11.sp, color = Color.White.copy(alpha = 0.4f))
+                        Text("%.0f".format(kcal), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("kcal", fontSize = 12.sp, color = Color(0xFFFF7043))
+                        Text("Calories", fontSize = 11.sp, color = Color.White.copy(alpha = 0.4f))
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape    = RoundedCornerShape(16.dp),
-                colors   = CardDefaults.cardColors(containerColor = Color(0xFF1B2E3C))
-            ) {
-                Row(
-                    modifier          = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "🕛", fontSize = 20.sp)
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("✅", fontSize = 20.sp)
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text     = "Keep this screen open to count steps in real time. Resets at midnight.",
-                        color    = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.sp
-                    )
+                    Column {
+                        Text("Counting in background", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Works even when app is closed  •  No internet needed",
+                            color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = cardBg)) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🕛", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Resets automatically every midnight",
+                        color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
+}
+
+private fun startStepService(context: Context) {
+    try {
+        val intent = Intent(context, StepCounterService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    } catch (e: Exception) { /* silent fail */ }
 }
 
 @Composable
 fun StepStatItem(emoji: String, value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = emoji, fontSize = 22.sp)
+        Text(emoji, fontSize = 22.sp)
         Spacer(modifier = Modifier.height(6.dp))
-        Text(text = value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        Text(text = label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
     }
 }

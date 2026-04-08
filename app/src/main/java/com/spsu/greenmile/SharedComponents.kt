@@ -21,12 +21,17 @@ fun StatCard(
     modifier: Modifier,
     emoji: String,
     value: String,
-    label: String
+    label: String,
+    isDark: Boolean = false
 ) {
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32)
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -38,12 +43,12 @@ fun StatCard(
                 text = value,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
-                color = Color(0xFF2E7D32)
+                color = textClr
             )
             Text(
                 text = label,
                 fontSize = 11.sp,
-                color = Color.Gray,
+                color = subClr,
                 textAlign = TextAlign.Center
             )
         }
@@ -52,7 +57,11 @@ fun StatCard(
 
 // ── Week Bar (single row bar) ───────────────────────────────
 @Composable
-fun WeekBar(day: String, value: Float, co2: String) {
+fun WeekBar(day: String, value: Float, co2: String, isDark: Boolean = false) {
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
+    val textClr = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32)
+    val track   = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8F5E9)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -63,7 +72,7 @@ fun WeekBar(day: String, value: Float, co2: String) {
             text = day,
             modifier = Modifier.width(40.dp),
             fontSize = 12.sp,
-            color = Color.Gray
+            color = subClr
         )
         Spacer(modifier = Modifier.width(8.dp))
         LinearProgressIndicator(
@@ -72,13 +81,13 @@ fun WeekBar(day: String, value: Float, co2: String) {
                 .weight(1f)
                 .height(8.dp),
             color = Color(0xFF66BB6A),
-            trackColor = Color(0xFFE8F5E9)
+            trackColor = track
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = co2,
             fontSize = 12.sp,
-            color = Color(0xFF2E7D32),
+            color = textClr,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.width(52.dp),
             textAlign = TextAlign.End
@@ -88,13 +97,18 @@ fun WeekBar(day: String, value: Float, co2: String) {
 
 // ── Weekly Chart Card (fetches last 7 days from Firestore) ──
 @Composable
-fun WeeklyChartCard(userId: String) {
+fun WeeklyChartCard(userId: String, isDark: Boolean = false) {
     data class DayData(val day: String, val carbon: Double)
 
     var weekData by remember { mutableStateOf<List<DayData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     val db = FirebaseFirestore.getInstance()
+    
+    val cardBg  = if (isDark) Color(0xFF1E1E1E) else Color.White
+    val textClr = if (isDark) Color.White       else Color(0xFF1B5E20)
+    val subClr  = if (isDark) Color(0xFFAAAAAA) else Color.Gray
+    val mainClr = if (isDark) Color(0xFF66BB6A) else Color(0xFF2E7D32)
 
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
@@ -142,20 +156,20 @@ fun WeeklyChartCard(userId: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "📊 Last 7 Days",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
-                color = Color(0xFF1B5E20)
+                color = textClr
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Daily carbon footprint (kg CO₂)",
                 fontSize = 12.sp,
-                color = Color.Gray
+                color = subClr
             )
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -179,7 +193,8 @@ fun WeeklyChartCard(userId: String) {
                     WeekBar(
                         day = dayData.day,
                         value = barProgress,
-                        co2 = if (dayData.carbon > 0) "%.1f kg".format(dayData.carbon) else "—"
+                        co2 = if (dayData.carbon > 0) "%.1f kg".format(dayData.carbon) else "—",
+                        isDark = isDark
                     )
                 }
 
@@ -188,7 +203,7 @@ fun WeeklyChartCard(userId: String) {
                 // Weekly total
                 val weekTotal = weekData.sumOf { it.carbon }
                 if (weekTotal > 0) {
-                    HorizontalDivider(color = Color(0xFFE8F5E9))
+                    HorizontalDivider(color = if (isDark) Color(0xFF333333) else Color(0xFFE8F5E9))
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -198,13 +213,13 @@ fun WeeklyChartCard(userId: String) {
                             text = "Weekly Total",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.Gray
+                            color = subClr
                         )
                         Text(
                             text = "%.1f kg CO₂".format(weekTotal),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
+                            color = mainClr
                         )
                     }
                 } else {
@@ -215,7 +230,7 @@ fun WeeklyChartCard(userId: String) {
                         Text(
                             text = "No activities logged this week yet 🌱",
                             fontSize = 12.sp,
-                            color = Color.Gray,
+                            color = subClr,
                             textAlign = TextAlign.Center
                         )
                     }
