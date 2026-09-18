@@ -38,9 +38,9 @@ cd GreenMile-SPSU-2026
 
 ### 2. Open the project in Android Studio
 
-Open the repository in a recent Android Studio release with the Android SDK Platform 35 installed. The repository does not include a Gradle wrapper, so Android Studio's bundled Gradle tooling is the easiest way to work with the project.
+Open the repository in a recent Android Studio release with the Android SDK Platform 35 installed. The repository includes the Gradle wrapper (`gradlew` and `gradlew.bat`), so Gradle does not need to be installed separately.
 
-The project is configured for Java 11 bytecode but should be run with JDK 17.
+The project is configured for Java 11 bytecode and should be run with JDK 17. The wrapper uses Gradle 9.2.1.
 
 After opening the project, let Android Studio sync the Gradle configuration before building.
 
@@ -75,6 +75,18 @@ From Android Studio:
 ```text
 Build → Make Project
 Run → Run 'app'
+```
+
+Or use the Gradle wrapper from the project root:
+
+```bash
+./gradlew assembleDebug
+```
+
+On Windows PowerShell:
+
+```powershell
+.\gradlew.bat assembleDebug
 ```
 
 Use an Android emulator or physical device running API 26 or newer.
