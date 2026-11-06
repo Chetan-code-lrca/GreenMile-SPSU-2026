@@ -91,6 +91,10 @@ On Windows PowerShell:
 
 Use an Android emulator or physical device running API 26 or newer.
 
+## Security and deployment status
+
+**Do not deploy with real student data until Firestore Security Rules and server-side authorization are implemented and tested.** The current Android UI's admin-role check is not an access-control boundary. See [`docs/FIRESTORE_SECURITY_REVIEW.md`](docs/FIRESTORE_SECURITY_REVIEW.md) for the identified risks, required data-model changes, and rollout checklist.
+
 ## Firestore data
 
 The app uses Cloud Firestore for its main application data. The primary collections are:
