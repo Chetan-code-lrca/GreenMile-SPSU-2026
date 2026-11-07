@@ -6,21 +6,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 object AuthManager {
 
-    // ── Normalize department names so CSE = cse = Computer Science ──
-    fun normalizeDepartment(input: String): String {
-        val clean = input.trim().lowercase()
-        return when {
-            clean.contains("cse") || clean.contains("computer science") || clean.contains("cs") -> "CSE"
-            clean.contains("ece") || clean.contains("electronics") -> "ECE"
-            clean.contains("me") || clean.contains("mechanical") -> "ME"
-            clean.contains("ce") || clean.contains("civil") -> "CE"
-            clean.contains("it") || clean.contains("information tech") -> "IT"
-            clean.contains("eee") || clean.contains("electrical") -> "EEE"
-            clean.contains("mca") -> "MCA"
-            clean.contains("mba") -> "MBA"
-            else -> input.trim().uppercase() // unknown — just uppercase it
-        }
-    }
+    // ── Normalize department labels for consistent aggregation ──
+    fun normalizeDepartment(input: String): String = DepartmentNormalizer.normalize(input)
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
