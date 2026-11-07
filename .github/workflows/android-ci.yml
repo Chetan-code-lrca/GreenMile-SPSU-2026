@@ -1,8 +1,6 @@
 name: Android CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -27,8 +25,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          if [[ -z "$sdkmanager_path" ]]; then
+            echo "Android SDK command-line tools were not found on the runner."
+            exit 1
+          fi
+          yes | "$sdkmanager_path" --licenses >/dev/null
+          "$sdkmanager_path" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
