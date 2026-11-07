@@ -18,9 +18,9 @@ The app is built with Kotlin and Jetpack Compose. Firebase Authentication is use
 
 ## Tech stack
 
-- Kotlin 2.0.0
+- Kotlin 2.0.21
 - Jetpack Compose with Material 3
-- Android Gradle Plugin 8.7.3
+- Android Gradle Plugin 9.0.1
 - Firebase Authentication
 - Cloud Firestore
 - Android SDK 35
@@ -40,7 +40,7 @@ cd GreenMile-SPSU-2026
 
 Open the repository in a recent Android Studio release with the Android SDK Platform 35 installed. The repository includes the Gradle wrapper (`gradlew` and `gradlew.bat`), so Gradle does not need to be installed separately.
 
-The project is configured for Java 11 bytecode and should be run with JDK 17. The wrapper uses Gradle 8.9.
+The project is configured for Java 11 bytecode and should be run with JDK 17. The wrapper uses Gradle 9.1.0, matching the Android Gradle Plugin 9.0.1 requirement. The wrapper verifies the downloaded distribution with its official SHA-256 checksum.
 
 After opening the project, let Android Studio sync the Gradle configuration before building.
 
